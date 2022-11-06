@@ -1,7 +1,7 @@
 local Lua = require('cmp-core.kit.Lua')
 
----@class cmp-core.kit.Async.AsyncTask<T>: { value: T }
----@field private value T
+---@class cmp-core.kit.Async.AsyncTask
+---@field private value any
 ---@field private status cmp-core.kit.Async.AsyncTask.Status
 ---@field private chained boolean
 ---@field private children (fun(): any)[]

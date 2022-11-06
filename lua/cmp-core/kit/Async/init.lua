@@ -7,7 +7,8 @@ _G.__kit__.Async.threads = _G.__kit__.Async.threads or {}
 local Async = {}
 
 ---Run async function immediately.
----@param runner fun()
+---@generic T: fun(...): cmp-core.kit.Async.AsyncTask
+---@param runner T
 ---@param ... any
 ---@return cmp-core.kit.Async.AsyncTask
 function Async.run(runner, ...)
@@ -15,8 +16,9 @@ function Async.run(runner, ...)
 end
 
 ---Create async function.
----@param runner fun()
----@return fun(): cmp-core.kit.Async.AsyncTask
+---@generic T: fun(...): cmp-core.kit.Async.AsyncTask
+---@param runner T
+---@return T
 function Async.async(runner)
   return function(...)
     local args = { ... }
