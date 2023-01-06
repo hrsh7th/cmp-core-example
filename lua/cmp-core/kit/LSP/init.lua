@@ -323,17 +323,17 @@ LSP.TokenFormat = {
   Relative = 'relative',
 }
 
----@class cmp-core.kit.LSP.ImplementationParams : cmp-core.kit.LSP.TextDocumentPositionParams
+---@class cmp-core.kit.LSP.ImplementationParams : cmp-core.kit.LSP.TextDocumentPositionParams, cmp-core.kit.LSP.WorkDoneProgressParams, cmp-core.kit.LSP.PartialResultParams
 
 ---@class cmp-core.kit.LSP.Location
 ---@field public uri string
 ---@field public range cmp-core.kit.LSP.Range
 
----@class cmp-core.kit.LSP.ImplementationRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions
+---@class cmp-core.kit.LSP.ImplementationRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions, cmp-core.kit.LSP.ImplementationOptions, cmp-core.kit.LSP.StaticRegistrationOptions
 
----@class cmp-core.kit.LSP.TypeDefinitionParams : cmp-core.kit.LSP.TextDocumentPositionParams
+---@class cmp-core.kit.LSP.TypeDefinitionParams : cmp-core.kit.LSP.TextDocumentPositionParams, cmp-core.kit.LSP.WorkDoneProgressParams, cmp-core.kit.LSP.PartialResultParams
 
----@class cmp-core.kit.LSP.TypeDefinitionRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions
+---@class cmp-core.kit.LSP.TypeDefinitionRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions, cmp-core.kit.LSP.TypeDefinitionOptions, cmp-core.kit.LSP.StaticRegistrationOptions
 
 ---@class cmp-core.kit.LSP.WorkspaceFolder
 ---@field public uri string The associated URI for this workspace folder.
@@ -348,16 +348,16 @@ LSP.TokenFormat = {
 ---@class cmp-core.kit.LSP.PartialResultParams
 ---@field public partialResultToken? cmp-core.kit.LSP.ProgressToken An optional token that a server can use to report partial results (e.g. streaming) to<br>the client.
 
----@class cmp-core.kit.LSP.DocumentColorParams
+---@class cmp-core.kit.LSP.DocumentColorParams : cmp-core.kit.LSP.WorkDoneProgressParams, cmp-core.kit.LSP.PartialResultParams
 ---@field public textDocument cmp-core.kit.LSP.TextDocumentIdentifier The text document.
 
 ---@class cmp-core.kit.LSP.ColorInformation
 ---@field public range cmp-core.kit.LSP.Range The range in the document where this color appears.
 ---@field public color cmp-core.kit.LSP.Color The actual color value for this color range.
 
----@class cmp-core.kit.LSP.DocumentColorRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions
+---@class cmp-core.kit.LSP.DocumentColorRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions, cmp-core.kit.LSP.DocumentColorOptions, cmp-core.kit.LSP.StaticRegistrationOptions
 
----@class cmp-core.kit.LSP.ColorPresentationParams
+---@class cmp-core.kit.LSP.ColorPresentationParams : cmp-core.kit.LSP.WorkDoneProgressParams, cmp-core.kit.LSP.PartialResultParams
 ---@field public textDocument cmp-core.kit.LSP.TextDocumentIdentifier The text document.
 ---@field public color cmp-core.kit.LSP.Color The color to request presentations for.
 ---@field public range cmp-core.kit.LSP.Range The range where the color would be inserted. Serves as a context.
@@ -373,7 +373,7 @@ LSP.TokenFormat = {
 ---@class cmp-core.kit.LSP.TextDocumentRegistrationOptions
 ---@field public documentSelector (cmp-core.kit.LSP.DocumentSelector | nil) A document selector to identify the scope of the registration. If set to null<br>the document selector provided on the client side will be used.
 
----@class cmp-core.kit.LSP.FoldingRangeParams
+---@class cmp-core.kit.LSP.FoldingRangeParams : cmp-core.kit.LSP.WorkDoneProgressParams, cmp-core.kit.LSP.PartialResultParams
 ---@field public textDocument cmp-core.kit.LSP.TextDocumentIdentifier The text document.
 
 ---@class cmp-core.kit.LSP.FoldingRange
@@ -384,13 +384,13 @@ LSP.TokenFormat = {
 ---@field public kind? cmp-core.kit.LSP.FoldingRangeKind Describes the kind of the folding range such as `comment' or 'region'. The kind<br>is used to categorize folding ranges and used by commands like 'Fold all comments'.<br>See [FoldingRangeKind](#FoldingRangeKind) for an enumeration of standardized kinds.
 ---@field public collapsedText? string The text that the client should show when the specified range is<br>collapsed. If not defined or not supported by the client, a default<br>will be chosen by the client.<br><br>@since 3.17.0
 
----@class cmp-core.kit.LSP.FoldingRangeRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions
+---@class cmp-core.kit.LSP.FoldingRangeRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions, cmp-core.kit.LSP.FoldingRangeOptions, cmp-core.kit.LSP.StaticRegistrationOptions
 
----@class cmp-core.kit.LSP.DeclarationParams : cmp-core.kit.LSP.TextDocumentPositionParams
+---@class cmp-core.kit.LSP.DeclarationParams : cmp-core.kit.LSP.TextDocumentPositionParams, cmp-core.kit.LSP.WorkDoneProgressParams, cmp-core.kit.LSP.PartialResultParams
 
----@class cmp-core.kit.LSP.DeclarationRegistrationOptions : cmp-core.kit.LSP.DeclarationOptions
+---@class cmp-core.kit.LSP.DeclarationRegistrationOptions : cmp-core.kit.LSP.DeclarationOptions, cmp-core.kit.LSP.TextDocumentRegistrationOptions, cmp-core.kit.LSP.StaticRegistrationOptions
 
----@class cmp-core.kit.LSP.SelectionRangeParams
+---@class cmp-core.kit.LSP.SelectionRangeParams : cmp-core.kit.LSP.WorkDoneProgressParams, cmp-core.kit.LSP.PartialResultParams
 ---@field public textDocument cmp-core.kit.LSP.TextDocumentIdentifier The text document.
 ---@field public positions cmp-core.kit.LSP.Position[] The positions inside the text document.
 
@@ -398,7 +398,7 @@ LSP.TokenFormat = {
 ---@field public range cmp-core.kit.LSP.Range The [range](#Range) of this selection range.
 ---@field public parent? cmp-core.kit.LSP.SelectionRange The parent selection range containing this range. Therefore `parent.range` must contain `this.range`.
 
----@class cmp-core.kit.LSP.SelectionRangeRegistrationOptions : cmp-core.kit.LSP.SelectionRangeOptions
+---@class cmp-core.kit.LSP.SelectionRangeRegistrationOptions : cmp-core.kit.LSP.SelectionRangeOptions, cmp-core.kit.LSP.TextDocumentRegistrationOptions, cmp-core.kit.LSP.StaticRegistrationOptions
 
 ---@class cmp-core.kit.LSP.WorkDoneProgressCreateParams
 ---@field public token cmp-core.kit.LSP.ProgressToken The token to be used to report progress.
@@ -406,7 +406,7 @@ LSP.TokenFormat = {
 ---@class cmp-core.kit.LSP.WorkDoneProgressCancelParams
 ---@field public token cmp-core.kit.LSP.ProgressToken The token to be used to report progress.
 
----@class cmp-core.kit.LSP.CallHierarchyPrepareParams : cmp-core.kit.LSP.TextDocumentPositionParams
+---@class cmp-core.kit.LSP.CallHierarchyPrepareParams : cmp-core.kit.LSP.TextDocumentPositionParams, cmp-core.kit.LSP.WorkDoneProgressParams
 
 ---@class cmp-core.kit.LSP.CallHierarchyItem
 ---@field public name string The name of this item.
@@ -418,23 +418,23 @@ LSP.TokenFormat = {
 ---@field public selectionRange cmp-core.kit.LSP.Range The range that should be selected and revealed when this symbol is being picked, e.g. the name of a function.<br>Must be contained by the [`range`](#CallHierarchyItem.range).
 ---@field public data? cmp-core.kit.LSP.LSPAny A data entry field that is preserved between a call hierarchy prepare and<br>incoming calls or outgoing calls requests.
 
----@class cmp-core.kit.LSP.CallHierarchyRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions
+---@class cmp-core.kit.LSP.CallHierarchyRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions, cmp-core.kit.LSP.CallHierarchyOptions, cmp-core.kit.LSP.StaticRegistrationOptions
 
----@class cmp-core.kit.LSP.CallHierarchyIncomingCallsParams
+---@class cmp-core.kit.LSP.CallHierarchyIncomingCallsParams : cmp-core.kit.LSP.WorkDoneProgressParams, cmp-core.kit.LSP.PartialResultParams
 ---@field public item cmp-core.kit.LSP.CallHierarchyItem
 
 ---@class cmp-core.kit.LSP.CallHierarchyIncomingCall
 ---@field public from cmp-core.kit.LSP.CallHierarchyItem The item that makes the call.
 ---@field public fromRanges cmp-core.kit.LSP.Range[] The ranges at which the calls appear. This is relative to the caller<br>denoted by [`this.from`](#CallHierarchyIncomingCall.from).
 
----@class cmp-core.kit.LSP.CallHierarchyOutgoingCallsParams
+---@class cmp-core.kit.LSP.CallHierarchyOutgoingCallsParams : cmp-core.kit.LSP.WorkDoneProgressParams, cmp-core.kit.LSP.PartialResultParams
 ---@field public item cmp-core.kit.LSP.CallHierarchyItem
 
 ---@class cmp-core.kit.LSP.CallHierarchyOutgoingCall
 ---@field public to cmp-core.kit.LSP.CallHierarchyItem The item that is called.
 ---@field public fromRanges cmp-core.kit.LSP.Range[] The range at which this item is called. This is the range relative to the caller, e.g the item<br>passed to [`provideCallHierarchyOutgoingCalls`](#CallHierarchyItemProvider.provideCallHierarchyOutgoingCalls)<br>and not [`this.to`](#CallHierarchyOutgoingCall.to).
 
----@class cmp-core.kit.LSP.SemanticTokensParams
+---@class cmp-core.kit.LSP.SemanticTokensParams : cmp-core.kit.LSP.WorkDoneProgressParams, cmp-core.kit.LSP.PartialResultParams
 ---@field public textDocument cmp-core.kit.LSP.TextDocumentIdentifier The text document.
 
 ---@class cmp-core.kit.LSP.SemanticTokens
@@ -444,9 +444,9 @@ LSP.TokenFormat = {
 ---@class cmp-core.kit.LSP.SemanticTokensPartialResult
 ---@field public data integer[]
 
----@class cmp-core.kit.LSP.SemanticTokensRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions
+---@class cmp-core.kit.LSP.SemanticTokensRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions, cmp-core.kit.LSP.SemanticTokensOptions, cmp-core.kit.LSP.StaticRegistrationOptions
 
----@class cmp-core.kit.LSP.SemanticTokensDeltaParams
+---@class cmp-core.kit.LSP.SemanticTokensDeltaParams : cmp-core.kit.LSP.WorkDoneProgressParams, cmp-core.kit.LSP.PartialResultParams
 ---@field public textDocument cmp-core.kit.LSP.TextDocumentIdentifier The text document.
 ---@field public previousResultId string The result id of a previous response. The result Id can either point to a full response<br>or a delta response depending on what was received last.
 
@@ -457,7 +457,7 @@ LSP.TokenFormat = {
 ---@class cmp-core.kit.LSP.SemanticTokensDeltaPartialResult
 ---@field public edits cmp-core.kit.LSP.SemanticTokensEdit[]
 
----@class cmp-core.kit.LSP.SemanticTokensRangeParams
+---@class cmp-core.kit.LSP.SemanticTokensRangeParams : cmp-core.kit.LSP.WorkDoneProgressParams, cmp-core.kit.LSP.PartialResultParams
 ---@field public textDocument cmp-core.kit.LSP.TextDocumentIdentifier The text document.
 ---@field public range cmp-core.kit.LSP.Range The range the semantic tokens are requested for.
 
@@ -470,13 +470,13 @@ LSP.TokenFormat = {
 ---@class cmp-core.kit.LSP.ShowDocumentResult
 ---@field public success boolean A boolean indicating if the show was successful.
 
----@class cmp-core.kit.LSP.LinkedEditingRangeParams : cmp-core.kit.LSP.TextDocumentPositionParams
+---@class cmp-core.kit.LSP.LinkedEditingRangeParams : cmp-core.kit.LSP.TextDocumentPositionParams, cmp-core.kit.LSP.WorkDoneProgressParams
 
 ---@class cmp-core.kit.LSP.LinkedEditingRanges
 ---@field public ranges cmp-core.kit.LSP.Range[] A list of ranges that can be edited together. The ranges must have<br>identical length and contain identical text content. The ranges cannot overlap.
 ---@field public wordPattern? string An optional word pattern (regular expression) that describes valid contents for<br>the given ranges. If no pattern is provided, the client configuration's word<br>pattern will be used.
 
----@class cmp-core.kit.LSP.LinkedEditingRangeRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions
+---@class cmp-core.kit.LSP.LinkedEditingRangeRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions, cmp-core.kit.LSP.LinkedEditingRangeOptions, cmp-core.kit.LSP.StaticRegistrationOptions
 
 ---@class cmp-core.kit.LSP.CreateFilesParams
 ---@field public files cmp-core.kit.LSP.FileCreate[] An array of all files/folders created in this operation.
@@ -495,7 +495,7 @@ LSP.TokenFormat = {
 ---@class cmp-core.kit.LSP.DeleteFilesParams
 ---@field public files cmp-core.kit.LSP.FileDelete[] An array of all files/folders deleted in this operation.
 
----@class cmp-core.kit.LSP.MonikerParams : cmp-core.kit.LSP.TextDocumentPositionParams
+---@class cmp-core.kit.LSP.MonikerParams : cmp-core.kit.LSP.TextDocumentPositionParams, cmp-core.kit.LSP.WorkDoneProgressParams, cmp-core.kit.LSP.PartialResultParams
 
 ---@class cmp-core.kit.LSP.Moniker
 ---@field public scheme string The scheme of the moniker. For example tsc or .Net
@@ -503,9 +503,9 @@ LSP.TokenFormat = {
 ---@field public unique cmp-core.kit.LSP.UniquenessLevel The scope in which the moniker is unique
 ---@field public kind? cmp-core.kit.LSP.MonikerKind The moniker kind if known.
 
----@class cmp-core.kit.LSP.MonikerRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions
+---@class cmp-core.kit.LSP.MonikerRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions, cmp-core.kit.LSP.MonikerOptions
 
----@class cmp-core.kit.LSP.TypeHierarchyPrepareParams : cmp-core.kit.LSP.TextDocumentPositionParams
+---@class cmp-core.kit.LSP.TypeHierarchyPrepareParams : cmp-core.kit.LSP.TextDocumentPositionParams, cmp-core.kit.LSP.WorkDoneProgressParams
 
 ---@class cmp-core.kit.LSP.TypeHierarchyItem
 ---@field public name string The name of this item.
@@ -517,22 +517,22 @@ LSP.TokenFormat = {
 ---@field public selectionRange cmp-core.kit.LSP.Range The range that should be selected and revealed when this symbol is being<br>picked, e.g. the name of a function. Must be contained by the<br>[`range`](#TypeHierarchyItem.range).
 ---@field public data? cmp-core.kit.LSP.LSPAny A data entry field that is preserved between a type hierarchy prepare and<br>supertypes or subtypes requests. It could also be used to identify the<br>type hierarchy in the server, helping improve the performance on<br>resolving supertypes and subtypes.
 
----@class cmp-core.kit.LSP.TypeHierarchyRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions
+---@class cmp-core.kit.LSP.TypeHierarchyRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions, cmp-core.kit.LSP.TypeHierarchyOptions, cmp-core.kit.LSP.StaticRegistrationOptions
 
----@class cmp-core.kit.LSP.TypeHierarchySupertypesParams
+---@class cmp-core.kit.LSP.TypeHierarchySupertypesParams : cmp-core.kit.LSP.WorkDoneProgressParams, cmp-core.kit.LSP.PartialResultParams
 ---@field public item cmp-core.kit.LSP.TypeHierarchyItem
 
----@class cmp-core.kit.LSP.TypeHierarchySubtypesParams
+---@class cmp-core.kit.LSP.TypeHierarchySubtypesParams : cmp-core.kit.LSP.WorkDoneProgressParams, cmp-core.kit.LSP.PartialResultParams
 ---@field public item cmp-core.kit.LSP.TypeHierarchyItem
 
----@class cmp-core.kit.LSP.InlineValueParams
+---@class cmp-core.kit.LSP.InlineValueParams : cmp-core.kit.LSP.WorkDoneProgressParams
 ---@field public textDocument cmp-core.kit.LSP.TextDocumentIdentifier The text document.
 ---@field public range cmp-core.kit.LSP.Range The document range for which inline values should be computed.
 ---@field public context cmp-core.kit.LSP.InlineValueContext Additional information about the context in which inline values were<br>requested.
 
----@class cmp-core.kit.LSP.InlineValueRegistrationOptions : cmp-core.kit.LSP.InlineValueOptions
+---@class cmp-core.kit.LSP.InlineValueRegistrationOptions : cmp-core.kit.LSP.InlineValueOptions, cmp-core.kit.LSP.TextDocumentRegistrationOptions, cmp-core.kit.LSP.StaticRegistrationOptions
 
----@class cmp-core.kit.LSP.InlayHintParams
+---@class cmp-core.kit.LSP.InlayHintParams : cmp-core.kit.LSP.WorkDoneProgressParams
 ---@field public textDocument cmp-core.kit.LSP.TextDocumentIdentifier The text document.
 ---@field public range cmp-core.kit.LSP.Range The document range for which inlay hints should be computed.
 
@@ -546,9 +546,9 @@ LSP.TokenFormat = {
 ---@field public paddingRight? boolean Render padding after the hint.<br><br>Note: Padding should use the editor's background color, not the<br>background color of the hint itself. That means padding can be used<br>to visually align/separate an inlay hint.
 ---@field public data? cmp-core.kit.LSP.LSPAny A data entry field that is preserved on an inlay hint between<br>a `textDocument/inlayHint` and a `inlayHint/resolve` request.
 
----@class cmp-core.kit.LSP.InlayHintRegistrationOptions : cmp-core.kit.LSP.InlayHintOptions
+---@class cmp-core.kit.LSP.InlayHintRegistrationOptions : cmp-core.kit.LSP.InlayHintOptions, cmp-core.kit.LSP.TextDocumentRegistrationOptions, cmp-core.kit.LSP.StaticRegistrationOptions
 
----@class cmp-core.kit.LSP.DocumentDiagnosticParams
+---@class cmp-core.kit.LSP.DocumentDiagnosticParams : cmp-core.kit.LSP.WorkDoneProgressParams, cmp-core.kit.LSP.PartialResultParams
 ---@field public textDocument cmp-core.kit.LSP.TextDocumentIdentifier The text document.
 ---@field public identifier? string The additional identifier  provided during registration.
 ---@field public previousResultId? string The result id of a previous response if provided.
@@ -559,9 +559,9 @@ LSP.TokenFormat = {
 ---@class cmp-core.kit.LSP.DiagnosticServerCancellationData
 ---@field public retriggerRequest boolean
 
----@class cmp-core.kit.LSP.DiagnosticRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions
+---@class cmp-core.kit.LSP.DiagnosticRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions, cmp-core.kit.LSP.DiagnosticOptions, cmp-core.kit.LSP.StaticRegistrationOptions
 
----@class cmp-core.kit.LSP.WorkspaceDiagnosticParams
+---@class cmp-core.kit.LSP.WorkspaceDiagnosticParams : cmp-core.kit.LSP.WorkDoneProgressParams, cmp-core.kit.LSP.PartialResultParams
 ---@field public identifier? string The additional identifier provided during registration.
 ---@field public previousResultIds cmp-core.kit.LSP.PreviousResultId[] The currently known diagnostic reports with their<br>previous result ids.
 
@@ -592,7 +592,7 @@ LSP.TokenFormat = {
 ---@class cmp-core.kit.LSP.UnregistrationParams
 ---@field public unregisterations cmp-core.kit.LSP.Unregistration[]
 
----@class cmp-core.kit.LSP.InitializeParams : cmp-core.kit.LSP._InitializeParams
+---@class cmp-core.kit.LSP.InitializeParams : cmp-core.kit.LSP._InitializeParams, cmp-core.kit.LSP.WorkspaceFoldersInitializeParams
 
 ---@class cmp-core.kit.LSP.InitializeResult
 ---@field public capabilities cmp-core.kit.LSP.ServerCapabilities The capabilities the language server provides.
@@ -646,7 +646,7 @@ LSP.TokenFormat = {
 ---@field public textDocument cmp-core.kit.LSP.TextDocumentIdentifier The document that was saved.
 ---@field public text? string Optional the content when saved. Depends on the includeText value<br>when the save notification was requested.
 
----@class cmp-core.kit.LSP.TextDocumentSaveRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions
+---@class cmp-core.kit.LSP.TextDocumentSaveRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions, cmp-core.kit.LSP.SaveOptions
 
 ---@class cmp-core.kit.LSP.WillSaveTextDocumentParams
 ---@field public textDocument cmp-core.kit.LSP.TextDocumentIdentifier The document that will be saved.
@@ -667,7 +667,7 @@ LSP.TokenFormat = {
 ---@field public version? integer Optional the version number of the document the diagnostics are published for.<br><br>@since 3.15.0
 ---@field public diagnostics cmp-core.kit.LSP.Diagnostic[] An array of diagnostic information items.
 
----@class cmp-core.kit.LSP.CompletionParams : cmp-core.kit.LSP.TextDocumentPositionParams
+---@class cmp-core.kit.LSP.CompletionParams : cmp-core.kit.LSP.TextDocumentPositionParams, cmp-core.kit.LSP.WorkDoneProgressParams, cmp-core.kit.LSP.PartialResultParams
 ---@field public context? cmp-core.kit.LSP.CompletionContext The completion context. This is only available it the client specifies<br>to send this using the client capability `textDocument.completion.contextSupport === true`
 
 ---@class cmp-core.kit.LSP.CompletionItem
@@ -703,17 +703,17 @@ LSP.TokenFormat = {
 ---@field public insertTextMode? cmp-core.kit.LSP.InsertTextMode A default insert text mode.<br><br>@since 3.17.0
 ---@field public data? cmp-core.kit.LSP.LSPAny A default data value.<br><br>@since 3.17.0
 
----@class cmp-core.kit.LSP.CompletionRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions
+---@class cmp-core.kit.LSP.CompletionRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions, cmp-core.kit.LSP.CompletionOptions
 
----@class cmp-core.kit.LSP.HoverParams : cmp-core.kit.LSP.TextDocumentPositionParams
+---@class cmp-core.kit.LSP.HoverParams : cmp-core.kit.LSP.TextDocumentPositionParams, cmp-core.kit.LSP.WorkDoneProgressParams
 
 ---@class cmp-core.kit.LSP.Hover
 ---@field public contents (cmp-core.kit.LSP.MarkupContent | cmp-core.kit.LSP.MarkedString | cmp-core.kit.LSP.MarkedString[]) The hover's content
 ---@field public range? cmp-core.kit.LSP.Range An optional range inside the text document that is used to<br>visualize the hover, e.g. by changing the background color.
 
----@class cmp-core.kit.LSP.HoverRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions
+---@class cmp-core.kit.LSP.HoverRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions, cmp-core.kit.LSP.HoverOptions
 
----@class cmp-core.kit.LSP.SignatureHelpParams : cmp-core.kit.LSP.TextDocumentPositionParams
+---@class cmp-core.kit.LSP.SignatureHelpParams : cmp-core.kit.LSP.TextDocumentPositionParams, cmp-core.kit.LSP.WorkDoneProgressParams
 ---@field public context? cmp-core.kit.LSP.SignatureHelpContext The signature help context. This is only available if the client specifies<br>to send this using the client capability `textDocument.signatureHelp.contextSupport === true`<br><br>@since 3.15.0
 
 ---@class cmp-core.kit.LSP.SignatureHelp
@@ -721,26 +721,26 @@ LSP.TokenFormat = {
 ---@field public activeSignature? integer The active signature. If omitted or the value lies outside the<br>range of `signatures` the value defaults to zero or is ignored if<br>the `SignatureHelp` has no signatures.<br><br>Whenever possible implementors should make an active decision about<br>the active signature and shouldn't rely on a default value.<br><br>In future version of the protocol this property might become<br>mandatory to better express this.
 ---@field public activeParameter? integer The active parameter of the active signature. If omitted or the value<br>lies outside the range of `signatures[activeSignature].parameters`<br>defaults to 0 if the active signature has parameters. If<br>the active signature has no parameters it is ignored.<br>In future version of the protocol this property might become<br>mandatory to better express the active parameter if the<br>active signature does have any.
 
----@class cmp-core.kit.LSP.SignatureHelpRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions
+---@class cmp-core.kit.LSP.SignatureHelpRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions, cmp-core.kit.LSP.SignatureHelpOptions
 
----@class cmp-core.kit.LSP.DefinitionParams : cmp-core.kit.LSP.TextDocumentPositionParams
+---@class cmp-core.kit.LSP.DefinitionParams : cmp-core.kit.LSP.TextDocumentPositionParams, cmp-core.kit.LSP.WorkDoneProgressParams, cmp-core.kit.LSP.PartialResultParams
 
----@class cmp-core.kit.LSP.DefinitionRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions
+---@class cmp-core.kit.LSP.DefinitionRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions, cmp-core.kit.LSP.DefinitionOptions
 
----@class cmp-core.kit.LSP.ReferenceParams : cmp-core.kit.LSP.TextDocumentPositionParams
+---@class cmp-core.kit.LSP.ReferenceParams : cmp-core.kit.LSP.TextDocumentPositionParams, cmp-core.kit.LSP.WorkDoneProgressParams, cmp-core.kit.LSP.PartialResultParams
 ---@field public context cmp-core.kit.LSP.ReferenceContext
 
----@class cmp-core.kit.LSP.ReferenceRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions
+---@class cmp-core.kit.LSP.ReferenceRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions, cmp-core.kit.LSP.ReferenceOptions
 
----@class cmp-core.kit.LSP.DocumentHighlightParams : cmp-core.kit.LSP.TextDocumentPositionParams
+---@class cmp-core.kit.LSP.DocumentHighlightParams : cmp-core.kit.LSP.TextDocumentPositionParams, cmp-core.kit.LSP.WorkDoneProgressParams, cmp-core.kit.LSP.PartialResultParams
 
 ---@class cmp-core.kit.LSP.DocumentHighlight
 ---@field public range cmp-core.kit.LSP.Range The range this highlight applies to.
 ---@field public kind? cmp-core.kit.LSP.DocumentHighlightKind The highlight kind, default is [text](#DocumentHighlightKind.Text).
 
----@class cmp-core.kit.LSP.DocumentHighlightRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions
+---@class cmp-core.kit.LSP.DocumentHighlightRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions, cmp-core.kit.LSP.DocumentHighlightOptions
 
----@class cmp-core.kit.LSP.DocumentSymbolParams
+---@class cmp-core.kit.LSP.DocumentSymbolParams : cmp-core.kit.LSP.WorkDoneProgressParams, cmp-core.kit.LSP.PartialResultParams
 ---@field public textDocument cmp-core.kit.LSP.TextDocumentIdentifier The text document.
 
 ---@class cmp-core.kit.LSP.SymbolInformation : cmp-core.kit.LSP.BaseSymbolInformation
@@ -757,9 +757,9 @@ LSP.TokenFormat = {
 ---@field public selectionRange cmp-core.kit.LSP.Range The range that should be selected and revealed when this symbol is being picked, e.g the name of a function.<br>Must be contained by the `range`.
 ---@field public children? cmp-core.kit.LSP.DocumentSymbol[] Children of this symbol, e.g. properties of a class.
 
----@class cmp-core.kit.LSP.DocumentSymbolRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions
+---@class cmp-core.kit.LSP.DocumentSymbolRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions, cmp-core.kit.LSP.DocumentSymbolOptions
 
----@class cmp-core.kit.LSP.CodeActionParams
+---@class cmp-core.kit.LSP.CodeActionParams : cmp-core.kit.LSP.WorkDoneProgressParams, cmp-core.kit.LSP.PartialResultParams
 ---@field public textDocument cmp-core.kit.LSP.TextDocumentIdentifier The document in which the command was invoked.
 ---@field public range cmp-core.kit.LSP.Range The range for which the command was invoked.
 ---@field public context cmp-core.kit.LSP.CodeActionContext Context carrying additional information.
@@ -782,9 +782,9 @@ LSP.TokenFormat = {
 ---@class cmp-core.kit.LSP.CodeAction.disabled
 ---@field public reason string Human readable description of why the code action is currently disabled.<br><br>This is displayed in the code actions UI.
 
----@class cmp-core.kit.LSP.CodeActionRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions
+---@class cmp-core.kit.LSP.CodeActionRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions, cmp-core.kit.LSP.CodeActionOptions
 
----@class cmp-core.kit.LSP.WorkspaceSymbolParams
+---@class cmp-core.kit.LSP.WorkspaceSymbolParams : cmp-core.kit.LSP.WorkDoneProgressParams, cmp-core.kit.LSP.PartialResultParams
 ---@field public query string A query string to filter symbols by. Clients may send an empty<br>string here to request all symbols.
 
 ---@class cmp-core.kit.LSP.WorkspaceSymbol : cmp-core.kit.LSP.BaseSymbolInformation
@@ -793,7 +793,7 @@ LSP.TokenFormat = {
 
 ---@class cmp-core.kit.LSP.WorkspaceSymbolRegistrationOptions : cmp-core.kit.LSP.WorkspaceSymbolOptions
 
----@class cmp-core.kit.LSP.CodeLensParams
+---@class cmp-core.kit.LSP.CodeLensParams : cmp-core.kit.LSP.WorkDoneProgressParams, cmp-core.kit.LSP.PartialResultParams
 ---@field public textDocument cmp-core.kit.LSP.TextDocumentIdentifier The document to request code lens for.
 
 ---@class cmp-core.kit.LSP.CodeLens
@@ -801,9 +801,9 @@ LSP.TokenFormat = {
 ---@field public command? cmp-core.kit.LSP.Command The command this code lens represents.
 ---@field public data? cmp-core.kit.LSP.LSPAny A data entry field that is preserved on a code lens item between<br>a [CodeLensRequest](#CodeLensRequest) and a [CodeLensResolveRequest]<br>(#CodeLensResolveRequest)
 
----@class cmp-core.kit.LSP.CodeLensRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions
+---@class cmp-core.kit.LSP.CodeLensRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions, cmp-core.kit.LSP.CodeLensOptions
 
----@class cmp-core.kit.LSP.DocumentLinkParams
+---@class cmp-core.kit.LSP.DocumentLinkParams : cmp-core.kit.LSP.WorkDoneProgressParams, cmp-core.kit.LSP.PartialResultParams
 ---@field public textDocument cmp-core.kit.LSP.TextDocumentIdentifier The document to provide document links for.
 
 ---@class cmp-core.kit.LSP.DocumentLink
@@ -812,20 +812,20 @@ LSP.TokenFormat = {
 ---@field public tooltip? string The tooltip text when you hover over this link.<br><br>If a tooltip is provided, is will be displayed in a string that includes instructions on how to<br>trigger the link, such as `{0} (ctrl + click)`. The specific instructions vary depending on OS,<br>user settings, and localization.<br><br>@since 3.15.0
 ---@field public data? cmp-core.kit.LSP.LSPAny A data entry field that is preserved on a document link between a<br>DocumentLinkRequest and a DocumentLinkResolveRequest.
 
----@class cmp-core.kit.LSP.DocumentLinkRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions
+---@class cmp-core.kit.LSP.DocumentLinkRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions, cmp-core.kit.LSP.DocumentLinkOptions
 
----@class cmp-core.kit.LSP.DocumentFormattingParams
+---@class cmp-core.kit.LSP.DocumentFormattingParams : cmp-core.kit.LSP.WorkDoneProgressParams
 ---@field public textDocument cmp-core.kit.LSP.TextDocumentIdentifier The document to format.
 ---@field public options cmp-core.kit.LSP.FormattingOptions The format options.
 
----@class cmp-core.kit.LSP.DocumentFormattingRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions
+---@class cmp-core.kit.LSP.DocumentFormattingRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions, cmp-core.kit.LSP.DocumentFormattingOptions
 
----@class cmp-core.kit.LSP.DocumentRangeFormattingParams
+---@class cmp-core.kit.LSP.DocumentRangeFormattingParams : cmp-core.kit.LSP.WorkDoneProgressParams
 ---@field public textDocument cmp-core.kit.LSP.TextDocumentIdentifier The document to format.
 ---@field public range cmp-core.kit.LSP.Range The range to format
 ---@field public options cmp-core.kit.LSP.FormattingOptions The format options
 
----@class cmp-core.kit.LSP.DocumentRangeFormattingRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions
+---@class cmp-core.kit.LSP.DocumentRangeFormattingRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions, cmp-core.kit.LSP.DocumentRangeFormattingOptions
 
 ---@class cmp-core.kit.LSP.DocumentOnTypeFormattingParams
 ---@field public textDocument cmp-core.kit.LSP.TextDocumentIdentifier The document to format.
@@ -833,18 +833,18 @@ LSP.TokenFormat = {
 ---@field public ch string The character that has been typed that triggered the formatting<br>on type request. That is not necessarily the last character that<br>got inserted into the document since the client could auto insert<br>characters as well (e.g. like automatic brace completion).
 ---@field public options cmp-core.kit.LSP.FormattingOptions The formatting options.
 
----@class cmp-core.kit.LSP.DocumentOnTypeFormattingRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions
+---@class cmp-core.kit.LSP.DocumentOnTypeFormattingRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions, cmp-core.kit.LSP.DocumentOnTypeFormattingOptions
 
----@class cmp-core.kit.LSP.RenameParams
+---@class cmp-core.kit.LSP.RenameParams : cmp-core.kit.LSP.WorkDoneProgressParams
 ---@field public textDocument cmp-core.kit.LSP.TextDocumentIdentifier The document to rename.
 ---@field public position cmp-core.kit.LSP.Position The position at which this request was sent.
 ---@field public newName string The new name of the symbol. If the given name is not valid the<br>request must return a [ResponseError](#ResponseError) with an<br>appropriate message set.
 
----@class cmp-core.kit.LSP.RenameRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions
+---@class cmp-core.kit.LSP.RenameRegistrationOptions : cmp-core.kit.LSP.TextDocumentRegistrationOptions, cmp-core.kit.LSP.RenameOptions
 
----@class cmp-core.kit.LSP.PrepareRenameParams : cmp-core.kit.LSP.TextDocumentPositionParams
+---@class cmp-core.kit.LSP.PrepareRenameParams : cmp-core.kit.LSP.TextDocumentPositionParams, cmp-core.kit.LSP.WorkDoneProgressParams
 
----@class cmp-core.kit.LSP.ExecuteCommandParams
+---@class cmp-core.kit.LSP.ExecuteCommandParams : cmp-core.kit.LSP.WorkDoneProgressParams
 ---@field public command string The identifier of the actual command handler.
 ---@field public arguments? cmp-core.kit.LSP.LSPAny[] Arguments that the command should be invoked with.
 
@@ -907,12 +907,12 @@ LSP.TokenFormat = {
 ---@field public start cmp-core.kit.LSP.Position The range's start position.
 ---@field public end cmp-core.kit.LSP.Position The range's end position.
 
----@class cmp-core.kit.LSP.ImplementationOptions
+---@class cmp-core.kit.LSP.ImplementationOptions : cmp-core.kit.LSP.WorkDoneProgressOptions
 
 ---@class cmp-core.kit.LSP.StaticRegistrationOptions
 ---@field public id? string The id used to register the request. The id can be used to deregister<br>the request again. See also Registration#id.
 
----@class cmp-core.kit.LSP.TypeDefinitionOptions
+---@class cmp-core.kit.LSP.TypeDefinitionOptions : cmp-core.kit.LSP.WorkDoneProgressOptions
 
 ---@class cmp-core.kit.LSP.WorkspaceFoldersChangeEvent
 ---@field public added cmp-core.kit.LSP.WorkspaceFolder[] The array of added workspace folders
@@ -931,21 +931,21 @@ LSP.TokenFormat = {
 ---@field public blue integer The blue component of this color in the range [0-1].
 ---@field public alpha integer The alpha component of this color in the range [0-1].
 
----@class cmp-core.kit.LSP.DocumentColorOptions
+---@class cmp-core.kit.LSP.DocumentColorOptions : cmp-core.kit.LSP.WorkDoneProgressOptions
 
----@class cmp-core.kit.LSP.FoldingRangeOptions
+---@class cmp-core.kit.LSP.FoldingRangeOptions : cmp-core.kit.LSP.WorkDoneProgressOptions
 
----@class cmp-core.kit.LSP.DeclarationOptions
+---@class cmp-core.kit.LSP.DeclarationOptions : cmp-core.kit.LSP.WorkDoneProgressOptions
 
 ---@class cmp-core.kit.LSP.Position
 ---@field public line integer Line position in a document (zero-based).<br><br>If a line number is greater than the number of lines in a document, it defaults back to the number of lines in the document.<br>If a line number is negative, it defaults to 0.
 ---@field public character integer Character offset on a line in a document (zero-based).<br><br>The meaning of this offset is determined by the negotiated<br>`PositionEncodingKind`.<br><br>If the character value is greater than the line length it defaults back to the<br>line length.
 
----@class cmp-core.kit.LSP.SelectionRangeOptions
+---@class cmp-core.kit.LSP.SelectionRangeOptions : cmp-core.kit.LSP.WorkDoneProgressOptions
 
----@class cmp-core.kit.LSP.CallHierarchyOptions
+---@class cmp-core.kit.LSP.CallHierarchyOptions : cmp-core.kit.LSP.WorkDoneProgressOptions
 
----@class cmp-core.kit.LSP.SemanticTokensOptions
+---@class cmp-core.kit.LSP.SemanticTokensOptions : cmp-core.kit.LSP.WorkDoneProgressOptions
 ---@field public legend cmp-core.kit.LSP.SemanticTokensLegend The legend used by the server
 ---@field public range? (boolean | {  }) Server supports providing semantic tokens for a specific range<br>of a document.
 ---@field public full? (boolean | { delta?: boolean }) Server supports providing semantic tokens for a full document.
@@ -955,7 +955,7 @@ LSP.TokenFormat = {
 ---@field public deleteCount integer The count of elements to remove.
 ---@field public data? integer[] The elements to insert.
 
----@class cmp-core.kit.LSP.LinkedEditingRangeOptions
+---@class cmp-core.kit.LSP.LinkedEditingRangeOptions : cmp-core.kit.LSP.WorkDoneProgressOptions
 
 ---@class cmp-core.kit.LSP.FileCreate
 ---@field public uri string A file:// URI for the location of the file/folder being created.
@@ -996,9 +996,9 @@ LSP.TokenFormat = {
 ---@class cmp-core.kit.LSP.FileDelete
 ---@field public uri string A file:// URI for the location of the file/folder being deleted.
 
----@class cmp-core.kit.LSP.MonikerOptions
+---@class cmp-core.kit.LSP.MonikerOptions : cmp-core.kit.LSP.WorkDoneProgressOptions
 
----@class cmp-core.kit.LSP.TypeHierarchyOptions
+---@class cmp-core.kit.LSP.TypeHierarchyOptions : cmp-core.kit.LSP.WorkDoneProgressOptions
 
 ---@class cmp-core.kit.LSP.InlineValueContext
 ---@field public frameId integer The stack frame (as a DAP Id) where the execution has stopped.
@@ -1017,7 +1017,7 @@ LSP.TokenFormat = {
 ---@field public range cmp-core.kit.LSP.Range The document range for which the inline value applies.<br>The range is used to extract the evaluatable expression from the underlying document.
 ---@field public expression? string If specified the expression overrides the extracted expression.
 
----@class cmp-core.kit.LSP.InlineValueOptions
+---@class cmp-core.kit.LSP.InlineValueOptions : cmp-core.kit.LSP.WorkDoneProgressOptions
 
 ---@class cmp-core.kit.LSP.InlayHintLabelPart
 ---@field public value string The value of this label part.
@@ -1029,7 +1029,7 @@ LSP.TokenFormat = {
 ---@field public kind cmp-core.kit.LSP.MarkupKind The type of the Markup
 ---@field public value string The content itself
 
----@class cmp-core.kit.LSP.InlayHintOptions
+---@class cmp-core.kit.LSP.InlayHintOptions : cmp-core.kit.LSP.WorkDoneProgressOptions
 ---@field public resolveProvider? boolean The server provides support to resolve additional<br>information for an inlay hint item.
 
 ---@class cmp-core.kit.LSP.RelatedFullDocumentDiagnosticReport : cmp-core.kit.LSP.FullDocumentDiagnosticReport
@@ -1047,7 +1047,7 @@ LSP.TokenFormat = {
 ---@field public kind "unchanged" A document diagnostic report indicating<br>no changes to the last result. A server can<br>only return `unchanged` if result ids are<br>provided.
 ---@field public resultId string A result id which will be sent on the next<br>diagnostic request for the same document.
 
----@class cmp-core.kit.LSP.DiagnosticOptions
+---@class cmp-core.kit.LSP.DiagnosticOptions : cmp-core.kit.LSP.WorkDoneProgressOptions
 ---@field public identifier? string An optional identifier under which the diagnostics are<br>managed by the client.
 ---@field public interFileDependencies boolean Whether the language has inter file dependencies meaning that<br>editing code in one file can result in a different diagnostic<br>set in another file. Inter file dependencies are common for<br>most programming languages and typically uncommon for linters.
 ---@field public workspaceDiagnostics boolean The server provides support for workspace diagnostics as well.
@@ -1099,7 +1099,7 @@ LSP.TokenFormat = {
 ---@field public id string The id used to unregister the request or notification. Usually an id<br>provided during the register request.
 ---@field public method string The method to unregister for.
 
----@class cmp-core.kit.LSP._InitializeParams
+---@class cmp-core.kit.LSP._InitializeParams : cmp-core.kit.LSP.WorkDoneProgressParams
 ---@field public processId (integer | nil) The process Id of the parent process that started<br>the server.<br><br>Is `null` if the process has not been started by another process.<br>If the parent process is not alive then the server should exit.
 ---@field public clientInfo? cmp-core.kit.LSP._InitializeParams.clientInfo Information about the client<br><br>@since 3.15.0
 ---@field public locale? string The locale the client is currently showing the user interface<br>in. This must not necessarily be the locale of the operating<br>system.<br><br>Uses IETF language tags as the value's syntax<br>(See https://en.wikipedia.org/wiki/IETF_language_tag)<br><br>@since 3.16.0
@@ -1195,7 +1195,7 @@ LSP.TokenFormat = {
 ---@field public insert cmp-core.kit.LSP.Range The range if the insert is requested
 ---@field public replace cmp-core.kit.LSP.Range The range if the replace is requested.
 
----@class cmp-core.kit.LSP.CompletionOptions
+---@class cmp-core.kit.LSP.CompletionOptions : cmp-core.kit.LSP.WorkDoneProgressOptions
 ---@field public triggerCharacters? string[] Most tools trigger completion request automatically without explicitly requesting<br>it using a keyboard shortcut (e.g. Ctrl+Space). Typically they do so when the user<br>starts to type an identifier. For example if the user types `c` in a JavaScript file<br>code complete will automatically pop up present `console` besides others as a<br>completion item. Characters that make up identifiers don't need to be listed here.<br><br>If code complete should automatically be trigger on characters not being valid inside<br>an identifier (for example `.` in JavaScript) list them in `triggerCharacters`.
 ---@field public allCommitCharacters? string[] The list of all possible characters that commit a completion. This field can be used<br>if clients don't support individual commit characters per completion item. See<br>`ClientCapabilities.textDocument.completion.completionItem.commitCharactersSupport`<br><br>If a server provides both `allCommitCharacters` and commit characters on an individual<br>completion item the ones on the completion item win.<br><br>@since 3.2.0
 ---@field public resolveProvider? boolean The server provides support to resolve additional<br>information for a completion item.
@@ -1204,7 +1204,7 @@ LSP.TokenFormat = {
 ---@class cmp-core.kit.LSP.CompletionOptions.completionItem
 ---@field public labelDetailsSupport? boolean The server has support for completion item label<br>details (see also `CompletionItemLabelDetails`) when<br>receiving a completion item in a resolve call.<br><br>@since 3.17.0
 
----@class cmp-core.kit.LSP.HoverOptions
+---@class cmp-core.kit.LSP.HoverOptions : cmp-core.kit.LSP.WorkDoneProgressOptions
 
 ---@class cmp-core.kit.LSP.SignatureHelpContext
 ---@field public triggerKind cmp-core.kit.LSP.SignatureHelpTriggerKind Action that caused signature help to be triggered.
@@ -1218,18 +1218,18 @@ LSP.TokenFormat = {
 ---@field public parameters? cmp-core.kit.LSP.ParameterInformation[] The parameters of this signature.
 ---@field public activeParameter? integer The index of the active parameter.<br><br>If provided, this is used in place of `SignatureHelp.activeParameter`.<br><br>@since 3.16.0
 
----@class cmp-core.kit.LSP.SignatureHelpOptions
+---@class cmp-core.kit.LSP.SignatureHelpOptions : cmp-core.kit.LSP.WorkDoneProgressOptions
 ---@field public triggerCharacters? string[] List of characters that trigger signature help automatically.
 ---@field public retriggerCharacters? string[] List of characters that re-trigger signature help.<br><br>These trigger characters are only active when signature help is already showing. All trigger characters<br>are also counted as re-trigger characters.<br><br>@since 3.15.0
 
----@class cmp-core.kit.LSP.DefinitionOptions
+---@class cmp-core.kit.LSP.DefinitionOptions : cmp-core.kit.LSP.WorkDoneProgressOptions
 
 ---@class cmp-core.kit.LSP.ReferenceContext
 ---@field public includeDeclaration boolean Include the declaration of the current symbol.
 
----@class cmp-core.kit.LSP.ReferenceOptions
+---@class cmp-core.kit.LSP.ReferenceOptions : cmp-core.kit.LSP.WorkDoneProgressOptions
 
----@class cmp-core.kit.LSP.DocumentHighlightOptions
+---@class cmp-core.kit.LSP.DocumentHighlightOptions : cmp-core.kit.LSP.WorkDoneProgressOptions
 
 ---@class cmp-core.kit.LSP.BaseSymbolInformation
 ---@field public name string The name of this symbol.
@@ -1237,7 +1237,7 @@ LSP.TokenFormat = {
 ---@field public tags? cmp-core.kit.LSP.SymbolTag[] Tags for this symbol.<br><br>@since 3.16.0
 ---@field public containerName? string The name of the symbol containing this symbol. This information is for<br>user interface purposes (e.g. to render a qualifier in the user interface<br>if necessary). It can't be used to re-infer a hierarchy for the document<br>symbols.
 
----@class cmp-core.kit.LSP.DocumentSymbolOptions
+---@class cmp-core.kit.LSP.DocumentSymbolOptions : cmp-core.kit.LSP.WorkDoneProgressOptions
 ---@field public label? string A human-readable string that is shown when multiple outlines trees<br>are shown for the same document.<br><br>@since 3.16.0
 
 ---@class cmp-core.kit.LSP.CodeActionContext
@@ -1245,17 +1245,17 @@ LSP.TokenFormat = {
 ---@field public only? cmp-core.kit.LSP.CodeActionKind[] Requested kind of actions to return.<br><br>Actions not of this kind are filtered out by the client before being shown. So servers<br>can omit computing them.
 ---@field public triggerKind? cmp-core.kit.LSP.CodeActionTriggerKind The reason why code actions were requested.<br><br>@since 3.17.0
 
----@class cmp-core.kit.LSP.CodeActionOptions
+---@class cmp-core.kit.LSP.CodeActionOptions : cmp-core.kit.LSP.WorkDoneProgressOptions
 ---@field public codeActionKinds? cmp-core.kit.LSP.CodeActionKind[] CodeActionKinds that this server may return.<br><br>The list of kinds may be generic, such as `CodeActionKind.Refactor`, or the server<br>may list out every specific kind they provide.
 ---@field public resolveProvider? boolean The server provides support to resolve additional<br>information for a code action.<br><br>@since 3.16.0
 
----@class cmp-core.kit.LSP.WorkspaceSymbolOptions
+---@class cmp-core.kit.LSP.WorkspaceSymbolOptions : cmp-core.kit.LSP.WorkDoneProgressOptions
 ---@field public resolveProvider? boolean The server provides support to resolve additional<br>information for a workspace symbol.<br><br>@since 3.17.0
 
----@class cmp-core.kit.LSP.CodeLensOptions
+---@class cmp-core.kit.LSP.CodeLensOptions : cmp-core.kit.LSP.WorkDoneProgressOptions
 ---@field public resolveProvider? boolean Code lens has a resolve provider as well.
 
----@class cmp-core.kit.LSP.DocumentLinkOptions
+---@class cmp-core.kit.LSP.DocumentLinkOptions : cmp-core.kit.LSP.WorkDoneProgressOptions
 ---@field public resolveProvider? boolean Document links have a resolve provider as well.
 
 ---@class cmp-core.kit.LSP.FormattingOptions
@@ -1265,18 +1265,18 @@ LSP.TokenFormat = {
 ---@field public insertFinalNewline? boolean Insert a newline character at the end of the file if one does not exist.<br><br>@since 3.15.0
 ---@field public trimFinalNewlines? boolean Trim all newlines after the final newline at the end of the file.<br><br>@since 3.15.0
 
----@class cmp-core.kit.LSP.DocumentFormattingOptions
+---@class cmp-core.kit.LSP.DocumentFormattingOptions : cmp-core.kit.LSP.WorkDoneProgressOptions
 
----@class cmp-core.kit.LSP.DocumentRangeFormattingOptions
+---@class cmp-core.kit.LSP.DocumentRangeFormattingOptions : cmp-core.kit.LSP.WorkDoneProgressOptions
 
 ---@class cmp-core.kit.LSP.DocumentOnTypeFormattingOptions
 ---@field public firstTriggerCharacter string A character on which formatting should be triggered, like `{`.
 ---@field public moreTriggerCharacter? string[] More trigger characters.
 
----@class cmp-core.kit.LSP.RenameOptions
+---@class cmp-core.kit.LSP.RenameOptions : cmp-core.kit.LSP.WorkDoneProgressOptions
 ---@field public prepareProvider? boolean Renames should be checked and tested before being executed.<br><br>@since version 3.12.0
 
----@class cmp-core.kit.LSP.ExecuteCommandOptions
+---@class cmp-core.kit.LSP.ExecuteCommandOptions : cmp-core.kit.LSP.WorkDoneProgressOptions
 ---@field public commands string[] The commands to be executed on the server
 
 ---@class cmp-core.kit.LSP.SemanticTokensLegend
@@ -1350,7 +1350,7 @@ LSP.TokenFormat = {
 ---@field public notebookSelector ({ notebook: (string | cmp-core.kit.LSP.NotebookDocumentFilter), cells?: { language: string }[] } | { notebook?: (string | cmp-core.kit.LSP.NotebookDocumentFilter), cells: { language: string }[] })[] The notebooks to be synced
 ---@field public save? boolean Whether save notification should be forwarded to<br>the server. Will only be honored if mode === `notebook`.
 
----@class cmp-core.kit.LSP.NotebookDocumentSyncRegistrationOptions : cmp-core.kit.LSP.NotebookDocumentSyncOptions
+---@class cmp-core.kit.LSP.NotebookDocumentSyncRegistrationOptions : cmp-core.kit.LSP.NotebookDocumentSyncOptions, cmp-core.kit.LSP.StaticRegistrationOptions
 
 ---@class cmp-core.kit.LSP.WorkspaceFoldersServerCapabilities
 ---@field public supported? boolean The server has support for workspace folders
@@ -1739,6 +1739,134 @@ LSP.TokenFormat = {
 ---@field public parser string The name of the parser.
 ---@field public version? string The version of the parser.
 ---@field public allowedTags? string[] A list of HTML tags that the client allows / supports in<br>Markdown.<br><br>@since 3.17.0
+
+---@alias cmp-core.kit.LSP.TextDocumentImplementationResponse (cmp-core.kit.LSP.Definition | cmp-core.kit.LSP.DefinitionLink[] | nil)
+
+---@alias cmp-core.kit.LSP.TextDocumentTypeDefinitionResponse (cmp-core.kit.LSP.Definition | cmp-core.kit.LSP.DefinitionLink[] | nil)
+
+---@alias cmp-core.kit.LSP.WorkspaceWorkspaceFoldersResponse (cmp-core.kit.LSP.WorkspaceFolder[] | nil)
+
+---@alias cmp-core.kit.LSP.WorkspaceConfigurationResponse cmp-core.kit.LSP.LSPAny[]
+
+---@alias cmp-core.kit.LSP.TextDocumentDocumentColorResponse cmp-core.kit.LSP.ColorInformation[]
+
+---@alias cmp-core.kit.LSP.TextDocumentColorPresentationResponse cmp-core.kit.LSP.ColorPresentation[]
+
+---@alias cmp-core.kit.LSP.TextDocumentFoldingRangeResponse (cmp-core.kit.LSP.FoldingRange[] | nil)
+
+---@alias cmp-core.kit.LSP.TextDocumentDeclarationResponse (cmp-core.kit.LSP.Declaration | cmp-core.kit.LSP.DeclarationLink[] | nil)
+
+---@alias cmp-core.kit.LSP.TextDocumentSelectionRangeResponse (cmp-core.kit.LSP.SelectionRange[] | nil)
+
+---@alias cmp-core.kit.LSP.WindowWorkDoneProgressCreateResponse nil
+
+---@alias cmp-core.kit.LSP.TextDocumentPrepareCallHierarchyResponse (cmp-core.kit.LSP.CallHierarchyItem[] | nil)
+
+---@alias cmp-core.kit.LSP.CallHierarchyIncomingCallsResponse (cmp-core.kit.LSP.CallHierarchyIncomingCall[] | nil)
+
+---@alias cmp-core.kit.LSP.CallHierarchyOutgoingCallsResponse (cmp-core.kit.LSP.CallHierarchyOutgoingCall[] | nil)
+
+---@alias cmp-core.kit.LSP.TextDocumentSemanticTokensFullResponse (cmp-core.kit.LSP.SemanticTokens | nil)
+
+---@alias cmp-core.kit.LSP.TextDocumentSemanticTokensFullDeltaResponse (cmp-core.kit.LSP.SemanticTokens | cmp-core.kit.LSP.SemanticTokensDelta | nil)
+
+---@alias cmp-core.kit.LSP.TextDocumentSemanticTokensRangeResponse (cmp-core.kit.LSP.SemanticTokens | nil)
+
+---@alias cmp-core.kit.LSP.WorkspaceSemanticTokensRefreshResponse nil
+
+---@alias cmp-core.kit.LSP.WindowShowDocumentResponse cmp-core.kit.LSP.ShowDocumentResult
+
+---@alias cmp-core.kit.LSP.TextDocumentLinkedEditingRangeResponse (cmp-core.kit.LSP.LinkedEditingRanges | nil)
+
+---@alias cmp-core.kit.LSP.WorkspaceWillCreateFilesResponse (cmp-core.kit.LSP.WorkspaceEdit | nil)
+
+---@alias cmp-core.kit.LSP.WorkspaceWillRenameFilesResponse (cmp-core.kit.LSP.WorkspaceEdit | nil)
+
+---@alias cmp-core.kit.LSP.WorkspaceWillDeleteFilesResponse (cmp-core.kit.LSP.WorkspaceEdit | nil)
+
+---@alias cmp-core.kit.LSP.TextDocumentMonikerResponse (cmp-core.kit.LSP.Moniker[] | nil)
+
+---@alias cmp-core.kit.LSP.TextDocumentPrepareTypeHierarchyResponse (cmp-core.kit.LSP.TypeHierarchyItem[] | nil)
+
+---@alias cmp-core.kit.LSP.TypeHierarchySupertypesResponse (cmp-core.kit.LSP.TypeHierarchyItem[] | nil)
+
+---@alias cmp-core.kit.LSP.TypeHierarchySubtypesResponse (cmp-core.kit.LSP.TypeHierarchyItem[] | nil)
+
+---@alias cmp-core.kit.LSP.TextDocumentInlineValueResponse (cmp-core.kit.LSP.InlineValue[] | nil)
+
+---@alias cmp-core.kit.LSP.WorkspaceInlineValueRefreshResponse nil
+
+---@alias cmp-core.kit.LSP.TextDocumentInlayHintResponse (cmp-core.kit.LSP.InlayHint[] | nil)
+
+---@alias cmp-core.kit.LSP.InlayHintResolveResponse cmp-core.kit.LSP.InlayHint
+
+---@alias cmp-core.kit.LSP.WorkspaceInlayHintRefreshResponse nil
+
+---@alias cmp-core.kit.LSP.TextDocumentDiagnosticResponse cmp-core.kit.LSP.DocumentDiagnosticReport
+
+---@alias cmp-core.kit.LSP.WorkspaceDiagnosticResponse cmp-core.kit.LSP.WorkspaceDiagnosticReport
+
+---@alias cmp-core.kit.LSP.WorkspaceDiagnosticRefreshResponse nil
+
+---@alias cmp-core.kit.LSP.ClientRegisterCapabilityResponse nil
+
+---@alias cmp-core.kit.LSP.ClientUnregisterCapabilityResponse nil
+
+---@alias cmp-core.kit.LSP.InitializeResponse cmp-core.kit.LSP.InitializeResult
+
+---@alias cmp-core.kit.LSP.ShutdownResponse nil
+
+---@alias cmp-core.kit.LSP.WindowShowMessageRequestResponse (cmp-core.kit.LSP.MessageActionItem | nil)
+
+---@alias cmp-core.kit.LSP.TextDocumentWillSaveWaitUntilResponse (cmp-core.kit.LSP.TextEdit[] | nil)
+
+---@alias cmp-core.kit.LSP.TextDocumentCompletionResponse (cmp-core.kit.LSP.CompletionItem[] | cmp-core.kit.LSP.CompletionList | nil)
+
+---@alias cmp-core.kit.LSP.CompletionItemResolveResponse cmp-core.kit.LSP.CompletionItem
+
+---@alias cmp-core.kit.LSP.TextDocumentHoverResponse (cmp-core.kit.LSP.Hover | nil)
+
+---@alias cmp-core.kit.LSP.TextDocumentSignatureHelpResponse (cmp-core.kit.LSP.SignatureHelp | nil)
+
+---@alias cmp-core.kit.LSP.TextDocumentDefinitionResponse (cmp-core.kit.LSP.Definition | cmp-core.kit.LSP.DefinitionLink[] | nil)
+
+---@alias cmp-core.kit.LSP.TextDocumentReferencesResponse (cmp-core.kit.LSP.Location[] | nil)
+
+---@alias cmp-core.kit.LSP.TextDocumentDocumentHighlightResponse (cmp-core.kit.LSP.DocumentHighlight[] | nil)
+
+---@alias cmp-core.kit.LSP.TextDocumentDocumentSymbolResponse (cmp-core.kit.LSP.SymbolInformation[] | cmp-core.kit.LSP.DocumentSymbol[] | nil)
+
+---@alias cmp-core.kit.LSP.TextDocumentCodeActionResponse ((cmp-core.kit.LSP.Command | cmp-core.kit.LSP.CodeAction)[] | nil)
+
+---@alias cmp-core.kit.LSP.CodeActionResolveResponse cmp-core.kit.LSP.CodeAction
+
+---@alias cmp-core.kit.LSP.WorkspaceSymbolResponse (cmp-core.kit.LSP.SymbolInformation[] | cmp-core.kit.LSP.WorkspaceSymbol[] | nil)
+
+---@alias cmp-core.kit.LSP.WorkspaceSymbolResolveResponse cmp-core.kit.LSP.WorkspaceSymbol
+
+---@alias cmp-core.kit.LSP.TextDocumentCodeLensResponse (cmp-core.kit.LSP.CodeLens[] | nil)
+
+---@alias cmp-core.kit.LSP.CodeLensResolveResponse cmp-core.kit.LSP.CodeLens
+
+---@alias cmp-core.kit.LSP.WorkspaceCodeLensRefreshResponse nil
+
+---@alias cmp-core.kit.LSP.TextDocumentDocumentLinkResponse (cmp-core.kit.LSP.DocumentLink[] | nil)
+
+---@alias cmp-core.kit.LSP.DocumentLinkResolveResponse cmp-core.kit.LSP.DocumentLink
+
+---@alias cmp-core.kit.LSP.TextDocumentFormattingResponse (cmp-core.kit.LSP.TextEdit[] | nil)
+
+---@alias cmp-core.kit.LSP.TextDocumentRangeFormattingResponse (cmp-core.kit.LSP.TextEdit[] | nil)
+
+---@alias cmp-core.kit.LSP.TextDocumentOnTypeFormattingResponse (cmp-core.kit.LSP.TextEdit[] | nil)
+
+---@alias cmp-core.kit.LSP.TextDocumentRenameResponse (cmp-core.kit.LSP.WorkspaceEdit | nil)
+
+---@alias cmp-core.kit.LSP.TextDocumentPrepareRenameResponse (cmp-core.kit.LSP.PrepareRenameResult | nil)
+
+---@alias cmp-core.kit.LSP.WorkspaceExecuteCommandResponse (cmp-core.kit.LSP.LSPAny | nil)
+
+---@alias cmp-core.kit.LSP.WorkspaceApplyEditResponse cmp-core.kit.LSP.ApplyWorkspaceEditResult
 
 ---@alias cmp-core.kit.LSP.Definition (cmp-core.kit.LSP.Location | cmp-core.kit.LSP.Location[])
 

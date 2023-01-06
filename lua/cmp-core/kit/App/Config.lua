@@ -1,7 +1,6 @@
 local kit = require('cmp-core.kit')
 local Cache = require('cmp-core.kit.App.Cache')
 
-
 ---@alias cmp-core.kit.App.Config.SchemaInternal cmp-core.kit.App.Config.Schema|{ revision: integer }
 
 ---@class cmp-core.kit.App.Config
@@ -66,9 +65,9 @@ function Config:get()
   local filetype = vim.api.nvim_buf_get_option(0, 'filetype')
   local bufnr = vim.api.nvim_get_current_buf()
   return self._cache:ensure({
-    self._global.revision or 0,
-    (self._buffer[bufnr] or {}).revision or 0,
-    (self._filetype[filetype] or {}).revision or 0,
+    tostring(self._global.revision or 0),
+    tostring((self._buffer[bufnr] or {}).revision or 0),
+    tostring((self._filetype[filetype] or {}).revision or 0),
   }, function()
     local config = self._default
     config = kit.merge(self._global, config)

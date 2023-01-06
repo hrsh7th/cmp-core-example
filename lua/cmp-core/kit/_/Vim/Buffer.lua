@@ -1,4 +1,4 @@
-local Highlight = require('cmp-core.kit.Vim.Highlight')
+local Highlight = require('cmp-core.kit._.Vim.Highlight')
 
 local Buffer = {}
 
