@@ -244,9 +244,23 @@ function CompletionItem:get_replace_range()
       range = self._list.itemDefaults.editRange
     end
   end
-  if range then
-    return self:_convert_cursor_range_encoding(range)
+
+  local default = self._provider:get_default_replace_range()
+  if not range then
+    return default
   end
+  range = self:_convert_cursor_range_encoding(range)
+
+  return {
+    start = {
+      line = 0,
+      character = math.min(default.start.character, range.start.character),
+    },
+    ['end'] = {
+      line = 0,
+      character = math.max(default['end'].character, range['end'].character),
+    },
+  }
 end
 
 ---Convert range encoding to LSP.PositionEncodingKind.UTF8.

@@ -43,11 +43,13 @@ function spec.setup(option)
     vim.fn.setcmdline(text, pos)
   end
 
+  -- Skip construct item.
   local context = LineContext.create()
   if not option.item then
     return context, { label = 'dummy' }
   end
 
+  -- Create completion provider with specified item.
   local provider = CompletionProvider.new({
     get_position_encoding_kind = function(_)
       return option.position_encoding_kind or LSP.PositionEncodingKind.UTF8
@@ -55,7 +57,7 @@ function spec.setup(option)
     get_keyword_pattern = function(_)
       return option.keyword_pattern or [[\%(-\?\d\+\%(\.\d\+\)\?\|\h\w*\%(-\w*\)*\)]]
     end,
-    resolve = function(item)
+    resolve = function(_, item)
       if not option.resolve then
         return Async.resolve(item)
       end
@@ -69,19 +71,22 @@ function spec.setup(option)
       })
     end,
   })
+
+  -- Construct item.
   local list = provider:complete(context):sync() --[[@as cmp-core.kit.LSP.CompletionList]]
   local item = CompletionItem.new(context, provider, list, list.items[1])
 
+  -- Insert filtering query after request.
   if option.mode ~= 'c' and option.input then
     local text = vim.api.nvim_get_current_line()
     local row, col = unpack(vim.api.nvim_win_get_cursor(0))
-    local before = text:sub(1, col - 1)
-    local after = text:sub(col)
+    local before = text:sub(1, col)
+    local after = text:sub(col + 1)
     vim.api.nvim_set_current_line(before .. option.input .. after)
     vim.api.nvim_win_set_cursor(0, { row, col + #option.input })
   end
 
-  return context, item
+  return LineContext.create(), item
 end
 
 return spec
