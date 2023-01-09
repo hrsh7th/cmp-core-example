@@ -86,20 +86,17 @@ function LinePatch.apply_by_keys(before, after, insert_text)
   local before_text = text:sub(1 + character - before, character)
   local after_text = text:sub(character + 1, character + after)
 
-  return Keymap.send(
-    table.concat({
-      Keymap.termcodes('<Cmd>setlocal backspace=2<CR>'),
-      Keymap.termcodes('<Cmd>setlocal textwidth=0<CR>'),
-      Keymap.termcodes('<Cmd>setlocal lazyredraw<CR>'),
-      Keymap.termcodes('<C-g>u<Left><Del>'):rep(vim.fn.strchars(before_text, true)),
-      Keymap.termcodes('<Del>'):rep(vim.fn.strchars(after_text, true)),
-      insert_text,
-      Keymap.termcodes(('<Cmd>setlocal backspace=%s<CR>'):format(vim.go.backspace or 2)),
-      Keymap.termcodes(('<Cmd>setlocal textwidth=%s<CR>'):format(vim.bo.textwidth or 0)),
-      Keymap.termcodes(('<Cmd>setlocal %slazyredraw<CR>'):format(vim.o.lazyredraw and '' or 'no')),
-    }, ''),
-    'in'
-  )
+  return Keymap.send({
+    Keymap.termcodes('<Cmd>setlocal backspace=2<CR>'),
+    Keymap.termcodes('<Cmd>setlocal textwidth=0<CR>'),
+    Keymap.termcodes('<Cmd>setlocal lazyredraw<CR>'),
+    Keymap.termcodes('<C-g>u<Left><Del>'):rep(vim.fn.strchars(before_text, true)),
+    Keymap.termcodes('<Del>'):rep(vim.fn.strchars(after_text, true)),
+    insert_text,
+    Keymap.termcodes(('<Cmd>setlocal backspace=%s<CR>'):format(vim.go.backspace or 2)),
+    Keymap.termcodes(('<Cmd>setlocal textwidth=%s<CR>'):format(vim.bo.textwidth or 0)),
+    Keymap.termcodes(('<Cmd>setlocal %slazyredraw<CR>'):format(vim.o.lazyredraw and '' or 'no')),
+  }, true)
 end
 
 return LinePatch

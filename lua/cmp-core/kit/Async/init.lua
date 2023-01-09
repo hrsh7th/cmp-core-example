@@ -15,7 +15,7 @@ end
 ---Alias of AsyncTask.race.
 ---@param tasks cmp-core.kit.Async.AsyncTask[]
 ---@return cmp-core.kit.Async.AsyncTask
-function Async.race(tasks)
+function Async.all(tasks)
   return AsyncTask.race(tasks)
 end
 
@@ -41,12 +41,11 @@ function Async.new(runner)
 end
 
 ---Run async function immediately.
----@generic T: fun(...): cmp-core.kit.Async.AsyncTask
+---@generic T: fun(): cmp-core.kit.Async.AsyncTask
 ---@param runner T
----@param ... any
 ---@return cmp-core.kit.Async.AsyncTask
-function Async.run(runner, ...)
-  return Async.async(runner)(...)
+function Async.run(runner)
+  return Async.async(runner)()
 end
 
 ---Return current context is async coroutine or not.

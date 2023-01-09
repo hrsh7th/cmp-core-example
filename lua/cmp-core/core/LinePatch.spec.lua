@@ -8,7 +8,7 @@ describe('cmp-core.core', function()
       describe('.' .. fn, function()
         it('should apply the insert-range patch (i)', function()
           Keymap.spec(function()
-            Keymap.send('i', 'in'):await()
+            Keymap.send('i'):await()
             local context, item = spec.setup({
               buffer_text = {
                 '(ins|ert)',
@@ -28,7 +28,7 @@ describe('cmp-core.core', function()
 
         it('should apply the replace-range patch (i)', function()
           Keymap.spec(function()
-            Keymap.send('i', 'in'):await()
+            Keymap.send('i'):await()
             local context, item = spec.setup({
               buffer_text = {
                 '(ins|ert)',
@@ -48,7 +48,7 @@ describe('cmp-core.core', function()
 
         it('should apply the insert-range patch (c)', function()
           Keymap.spec(function()
-            Keymap.send(':', 'in'):await()
+            Keymap.send(':'):await()
             local context, item = spec.setup({
               mode = 'c',
               buffer_text = {
@@ -69,7 +69,7 @@ describe('cmp-core.core', function()
 
         it('should apply the replace-range patch (c)', function()
           Keymap.spec(function()
-            Keymap.send(':', 'in'):await()
+            Keymap.send(':'):await()
             local context, item = spec.setup({
               mode = 'c',
               buffer_text = {

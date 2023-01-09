@@ -181,7 +181,7 @@ function CompletionItem:confirm(option)
       after = range['end'].character - self._context.character
     end
 
-    -- Sync additionalTextEdits.
+    -- Apply sync additionalTextEdits if provied.
     if self._item.additionalTextEdits then
       vim.lsp.util.apply_text_edits(self._item.additionalTextEdits, 0, LSP.PositionEncodingKind.UTF8)
     end
@@ -189,7 +189,7 @@ function CompletionItem:confirm(option)
     -- TODO: should accept snippet expansion function.
     LinePatch.apply_by_func(before, after, self:get_insert_text()):await()
 
-    -- Async additionalTextEdits.
+    -- Apply async additionalTextEdits if provided.
     if not self._item.additionalTextEdits then
       local resolved_item = self:resolve():await()
       if resolved_item.additionalTextEdits then

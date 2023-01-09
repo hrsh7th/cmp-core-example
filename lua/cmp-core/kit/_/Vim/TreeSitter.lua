@@ -271,19 +271,18 @@ end
 
 ---Dump node or node-table.
 ---@param node userdata|userdata[]
+---@return string|string[]
 function TreeSitter.dump(node)
   if not node then
-    return print(node)
+    return ''
   end
 
   if type(node) == 'table' then
-    if #node == 0 then
-      return print('empty table')
-    end
+    local paths = {}
     for _, v in ipairs(node) do
-      TreeSitter.dump(v)
+      table.insert(paths, TreeSitter.dump(v))
     end
-    return
+    return paths
   end
 
   local message = node:type()
@@ -295,7 +294,7 @@ function TreeSitter.dump(node)
       break
     end
   end
-  print(message)
+  return message
 end
 
 return TreeSitter
