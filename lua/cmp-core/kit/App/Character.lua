@@ -56,4 +56,3 @@ function Character.is_symbol(byte)
 end
 
 return Character
-

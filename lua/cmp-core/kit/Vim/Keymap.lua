@@ -42,21 +42,30 @@ function Keymap.send(keys, no_insert)
 
     local callback = Keymap.termcodes(('<Cmd>lua require("cmp-core.kit.Vim.Keymap")._resolve(%s)<CR>'):format(unique_id))
     if no_insert then
-      for _, keys in ipairs(kit.to_array(keys)) do
-        keys = to_keys(keys)
-        vim.api.nvim_feedkeys(keys.keys, keys.remap and 'm' or 'n', true)
+      for _, keys_ in ipairs(kit.to_array(keys)) do
+        keys_ = to_keys(keys_)
+        vim.api.nvim_feedkeys(keys_.keys, keys_.remap and 'm' or 'n', true)
       end
       vim.api.nvim_feedkeys(callback, 'n', true)
     else
       vim.api.nvim_feedkeys(callback, 'in', true)
-      for _, keys in ipairs(kit.reverse(kit.to_array(keys))) do
-        keys = to_keys(keys)
-        vim.api.nvim_feedkeys(keys.keys, 'i' .. (keys.remap and 'm' or 'n'), true)
+      for _, keys_ in ipairs(kit.reverse(kit.to_array(keys))) do
+        keys_ = to_keys(keys_)
+        vim.api.nvim_feedkeys(keys_.keys, 'i' .. (keys_.remap and 'm' or 'n'), true)
       end
     end
   end):catch(function()
     Keymap._callbacks[unique_id] = nil
   end)
+end
+
+---Return sendabke keys with callback function.
+---@param callback fun(...: any): any
+---@return string
+function Keymap.to_sendable(callback)
+  local unique_id = kit.unique_id()
+  Keymap._callbacks[unique_id] = Async.async(callback)
+  return Keymap.termcodes(('<Cmd>lua require("cmp-core.kit.Vim.Keymap")._resolve(%s)<CR>'):format(unique_id))
 end
 
 ---Test spec helper.
