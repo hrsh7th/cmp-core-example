@@ -6,10 +6,10 @@ local Character = require('cmp-core.core.Character')
 ---@field public query_index_e integer
 ---@field public text_index_s integer
 ---@field public text_index_e integer
----@field public strict_count integer
 
 ---@class cmp-core.Matcher.State
 ---@field public query string
+---@field public score integer
 ---@field public matches cmp-core.Matcher.Match[]
 
 ---@param text string
@@ -40,10 +40,18 @@ Matcher.__index = Matcher
 
 ---@enum cmp-core.Matcher.MatchKind
 Matcher.MatchKind = {
-  Prefix = 'prefix',
-  Boundaly = 'boundaly',
-  Fuzzy = 'fuzzy',
-  Pending = 'pending',
+  Prefix = 'Prefix',
+  Boundaly = 'Boundaly',
+  Fuzzy = 'Fuzzy',
+  Pending = 'Pending',
+}
+
+---@type table<cmp-core.Matcher.MatchKind, integer>
+Matcher.MatchBonus = {
+  [Matcher.MatchKind.Prefix] = 25,
+  [Matcher.MatchKind.Boundaly] = 5,
+  [Matcher.MatchKind.Fuzzy] = 0,
+  [Matcher.MatchKind.Pending] = 0,
 }
 
 ---@return cmp-core.Matcher
@@ -55,48 +63,47 @@ end
 
 ---@param query string
 ---@param text string
----@return number, cmp-core.Matcher.Match[]
+---@return integer, cmp-core.Matcher.Match[]
 function Matcher:match(query, text)
-  if not self.text_cache[text] then
-    self.text_cache[text] = {
-      query = '',
+  if #query > #text then
+    return 0, {}
+  end
+
+  local state = self.text_cache[text]
+  if not state then
+    state = {
+      score = 0,
+      query = query,
       matches = {
         {
           kind = Matcher.MatchKind.Pending,
-          query_index_s = 1,
-          query_index_e = 1,
-          text_index_s = 1,
-          text_index_e = 1,
-          strict_count = 0,
+          query_index_s = 0,
+          query_index_e = 0,
+          text_index_s = 0,
+          text_index_e = 0,
         }
       }
     }
-  end
-
-  -- Continue matching if possible.
-  local state = self.text_cache[text]
-  local found = false
-  for i = #query, 1, -1 do
-    if state.query == query:sub(1, i) then
-      found = true
-      break
-    end
-  end
-  if not found then
-    state.matches = {
-      {
-        kind = Matcher.MatchKind.Pending,
-        query_index_s = 1,
-        query_index_e = 1,
-        text_index_s = 1,
-        text_index_e = 1,
-        strict_count = 0,
+    self.text_cache[text] = state
+  else
+    if query:sub(1, #state.query) ~= state.query then
+      state.score = 0
+      state.matches = {
+        {
+          kind = Matcher.MatchKind.Pending,
+          query_index_s = 0,
+          query_index_e = 0,
+          text_index_s = 0,
+          text_index_e = 0,
+        }
       }
-    }
+    end
+    state.query = query
   end
-  state.query = query
 
   local current = state.matches[#state.matches]
+  current.query_index_e = current.query_index_e + 1
+  current.text_index_e = current.text_index_e + 1
   while current.query_index_e <= #query and current.text_index_e <= #text do
     local query_byte = query:byte(current.query_index_e)
     local text_byte = text:byte(current.text_index_e)
@@ -110,7 +117,7 @@ function Matcher:match(query, text)
       -- Update `*index_e` on every match.
       current.query_index_e = current.query_index_e + 1
       current.text_index_e = current.text_index_e + 1
-      current.strict_count = current.strict_count + (query_byte == text_byte and 1 or 0)
+      state.score = state.score + 1 + (query_byte == text_byte and 0.01 or 0) + Matcher.MatchBonus[current.kind]
     else
       if current.kind ~= Matcher.MatchKind.Pending then
         current.query_index_e = current.query_index_e - 1
@@ -118,17 +125,19 @@ function Matcher:match(query, text)
       end
 
       -- Search next match index (limited backtrack).
+      local is_strict_match = false
       local next_query_index = current.query_index_e + 1
       local next_text_index = get_next_semantic_index(text, current.text_index_e)
       while next_text_index <= #text do
         local next_text_byte = text:byte(next_text_index)
         while current.query_index_s < next_query_index do
           if Character.match(query:byte(next_query_index), next_text_byte) then
+            is_strict_match = query:byte(next_query_index) == next_text_byte
             break
           end
           next_query_index = next_query_index - 1
         end
-        if current.query_index_s ~= next_query_index then
+        if current.query_index_s < next_query_index then
           break
         end
         next_query_index = current.query_index_e + 1
@@ -142,37 +151,27 @@ function Matcher:match(query, text)
 
       -- Prepare next match.
       current = {
-        kind = Matcher.MatchKind.Pending,
+        kind = Matcher.MatchKind.Boundaly,
         query_index_s = next_query_index,
-        query_index_e = next_query_index,
+        query_index_e = next_query_index + 1,
         text_index_s = next_text_index,
-        text_index_e = next_text_index,
-        strict_count = 0,
+        text_index_e = next_text_index + 1,
       }
       state.matches[#state.matches + 1] = current
+      state.score = state.score + 1 + (is_strict_match and 0.01 or 0) + Matcher.MatchBonus[current.kind]
     end
   end
 
   -- No match if the query remains.
-  if current.query_index_e < #query then
+  if current.query_index_e > #query then
+    current.query_index_e = current.query_index_e - 1
+    current.text_index_e = current.text_index_e - 1
+  else
+    -- TODO: fuzzy matching
     return 0, {}
   end
 
-  -- Fixup last match data.
-  current.kind = current.query_index_s == 1 and Matcher.MatchKind.Prefix or Matcher.MatchKind.Boundaly
-  current.query_index_e = current.query_index_e - 1
-  current.text_index_e = current.text_index_e - 1
-
-  -- Calculate scores.
-  local score = 0
-  for i = 1, #state.matches do
-    local match = state.matches[i]
-    if match.kind == Matcher.MatchKind.Prefix then
-      score = score + 100
-    end
-    score = score + (match.query_index_e - match.query_index_s + 1) + (match.strict_count * 0.01)
-  end
-  return score, state.matches
+  return state.score, state.matches
 end
 
 return Matcher

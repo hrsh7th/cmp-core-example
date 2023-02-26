@@ -1,7 +1,7 @@
 local Matcher = require('cmp-core.core.Matcher')
 
 local function bench(name, func, count)
-  count = count or 1000000
+  count = count or 2000000
 
   collectgarbage('collect')
   local s = os.clock()
@@ -25,6 +25,7 @@ describe('cmp-core.core', function()
         matcher:match('f', 'foo_bar_baz')
         matcher:match('fo', 'foo_bar_baz')
         matcher:match('foo', 'foo_bar_baz')
+        matcher:match('fooaaz', 'foo_bar_baz')
       end)
     end)
 
@@ -50,6 +51,10 @@ describe('cmp-core.core', function()
     it('should match various words', function()
       local matcher, score, matches = Matcher.new()
 
+      assert.equals(matcher:match('f*', 'foo'), 0)
+      assert.equals(matcher:match('fo*', 'foo'), 0)
+      assert.equals(matcher:match('foo*', 'foo'), 0)
+
       score, matches = matcher:match('foo', 'foo')
       assert.is_truthy(score > 0)
       assert.are.same({
@@ -59,7 +64,6 @@ describe('cmp-core.core', function()
           query_index_e = 3,
           text_index_s = 1,
           text_index_e = 3,
-          strict_count = 3,
         }
       }, matches)
 
@@ -72,42 +76,13 @@ describe('cmp-core.core', function()
           query_index_e = 1,
           text_index_s = 1,
           text_index_e = 1,
-          strict_count = 1,
         }, {
-          kind = Matcher.MatchKind.Boundaly,
-          query_index_s = 2,
-          query_index_e = 2,
-          text_index_s = 3,
-          text_index_e = 3,
-          strict_count = 1,
-        }
-      }, matches)
-
-      score, matches = matcher:match('abc', 'a_b_c')
-      assert.is_truthy(score > 0)
-      assert.are.same({
-        {
-          kind = Matcher.MatchKind.Prefix,
-          query_index_s = 1,
-          query_index_e = 1,
-          text_index_s = 1,
-          text_index_e = 1,
-          strict_count = 1,
-        }, {
-          kind = Matcher.MatchKind.Boundaly,
-          query_index_s = 2,
-          query_index_e = 2,
-          text_index_s = 3,
-          text_index_e = 3,
-          strict_count = 1,
-        }, {
-          kind = Matcher.MatchKind.Boundaly,
-          query_index_s = 3,
-          query_index_e = 3,
-          text_index_s = 5,
-          text_index_e = 5,
-          strict_count = 1,
-        }
+        kind = Matcher.MatchKind.Boundaly,
+        query_index_s = 2,
+        query_index_e = 2,
+        text_index_s = 3,
+        text_index_e = 3,
+      }
       }, matches)
 
       score, matches = matcher:match('ac', 'a_b_c')
@@ -119,15 +94,13 @@ describe('cmp-core.core', function()
           query_index_e = 1,
           text_index_s = 1,
           text_index_e = 1,
-          strict_count = 1,
         }, {
-          kind = Matcher.MatchKind.Boundaly,
-          query_index_s = 2,
-          query_index_e = 2,
-          text_index_s = 5,
-          text_index_e = 5,
-          strict_count = 1,
-        }
+        kind = Matcher.MatchKind.Boundaly,
+        query_index_s = 2,
+        query_index_e = 2,
+        text_index_s = 5,
+        text_index_e = 5,
+      }
       }, matches)
 
       score, matches = matcher:match('bora', 'border-radius')
@@ -139,15 +112,13 @@ describe('cmp-core.core', function()
           query_index_e = 3,
           text_index_s = 1,
           text_index_e = 3,
-          strict_count = 3,
         }, {
-          kind = Matcher.MatchKind.Boundaly,
-          query_index_s = 3,
-          query_index_e = 4,
-          text_index_s = 8,
-          text_index_e = 9,
-          strict_count = 2,
-        }
+        kind = Matcher.MatchKind.Boundaly,
+        query_index_s = 3,
+        query_index_e = 4,
+        text_index_s = 8,
+        text_index_e = 9,
+      }
       }, matches)
     end)
   end)
