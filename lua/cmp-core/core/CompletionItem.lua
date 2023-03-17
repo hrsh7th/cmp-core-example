@@ -131,13 +131,13 @@ end
 function CompletionItem:resolve()
   return Async.run(function()
     local resolved_item = self._cache
-      :ensure('resolve', function()
-        if self._provider.resolve then
-          return self._provider:resolve(self._item)
-        end
-        return Async.resolve(self._item)
-      end)
-      :await()
+        :ensure('resolve', function()
+          if self._provider.resolve then
+            return self._provider:resolve(self._item)
+          end
+          return Async.resolve(self._item)
+        end)
+        :await()
     if not resolved_item then
       self._cache:del('resolve')
     end
@@ -172,7 +172,7 @@ function CompletionItem:confirm(option)
     -- Make overwrite information.
     local before, after
     if option.replace then
-      local range = (self:get_replace_range() or self._provider:get_default_replace_range())
+      local range = self:get_replace_range() or self:_max_range(self._provider:get_default_replace_range(), self:get_insert_range())
       before = self._context.character - range.start.character
       after = range['end'].character - self._context.character
     else
@@ -201,6 +201,7 @@ end
 
 ---Return insert range.
 ---NOTE: The line property can't be used. This is usually 0.
+---NOTE: This range is utf-8 byte length based.
 ---@return cmp-core.kit.LSP.Range?
 function CompletionItem:get_insert_range()
   local range --[[@as cmp-core.kit.LSP.Range]]
@@ -218,55 +219,34 @@ function CompletionItem:get_insert_range()
     end
   end
   if range then
-    return self:_convert_cursor_range_encoding(range)
+    return self:_convert_range_encoding(range)
   end
 end
 
 ---Return replace range.
 ---NOTE: The line property can't be used. This is usually 0.
+---NOTE: This range is utf-8 byte length based.
 ---@return cmp-core.kit.LSP.Range?
 function CompletionItem:get_replace_range()
   local range --[[@as cmp-core.kit.LSP.Range]]
   if self._item.textEdit then
     if self._item.textEdit.replace then
       range = self._item.textEdit.replace
-    elseif self._item.textEdit.insert then
-      range = self._item.textEdit.insert
-    else
-      range = self._item.textEdit.range
     end
   elseif self._list.itemDefaults and self._list.itemDefaults.editRange then
     if self._list.itemDefaults.editRange.replace then
       range = self._list.itemDefaults.editRange.replace
-    elseif self._list.itemDefaults.editRange.insert then
-      range = self._list.itemDefaults.editRange.insert
-    else
-      range = self._list.itemDefaults.editRange
     end
   end
-
-  local default = self._provider:get_default_replace_range()
-  if not range then
-    return default
+  if range then
+    return self:_convert_range_encoding(range)
   end
-  range = self:_convert_cursor_range_encoding(range)
-
-  return {
-    start = {
-      line = 0,
-      character = math.min(default.start.character, range.start.character),
-    },
-    ['end'] = {
-      line = 0,
-      character = math.max(default['end'].character, range['end'].character),
-    },
-  }
 end
 
 ---Convert range encoding to LSP.PositionEncodingKind.UTF8.
 ---@param range cmp-core.kit.LSP.Range
 ---@return cmp-core.kit.LSP.Range
-function CompletionItem:_convert_cursor_range_encoding(range)
+function CompletionItem:_convert_range_encoding(range)
   local from_encoding = self._provider:get_position_encoding_kind()
   return {
     start = self._context.cache:ensure('CompletionItem:_convert_range_encoding:start:' .. range.start.character .. ':' .. from_encoding, function()
@@ -276,6 +256,32 @@ function CompletionItem:_convert_cursor_range_encoding(range)
       return Position.to_utf8(self._context.text, range['end'], from_encoding)
     end),
   }
+end
+
+---Get expanded range.
+---@param ... cmp-core.kit.LSP.Range?
+function CompletionItem:_max_range(...)
+  local max = {
+    start = {
+      line = 0,
+      character = self._context.character,
+    },
+    ['end'] = {
+      line = 0,
+      character = self._context.character,
+    },
+  } --[[@as cmp-core.kit.LSP.Range]]
+  for _, range in ipairs({ ... }) do
+    if range then
+      if range.start.character < max.start.character then
+        max.start.character = range.start.character
+      end
+      if max['end'].character < range['end'].character then
+        max['end'].character = range['end'].character
+      end
+    end
+  end
+  return max
 end
 
 return CompletionItem

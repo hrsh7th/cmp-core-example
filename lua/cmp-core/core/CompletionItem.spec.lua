@@ -3,12 +3,29 @@ local LSP = require('cmp-core.kit.LSP')
 local Async = require('cmp-core.kit.Async')
 local Keymap = require('cmp-core.kit.Vim.Keymap')
 
+---@return cmp-core.kit.LSP.Range
+local function range(sl, sc, el, ec)
+  return {
+    start = {
+      line = sl,
+      character = sc,
+    },
+    ['end'] = {
+      line = el,
+      character = ec,
+    },
+  }
+end
+
+---@param context cmp-core.LineContext
+---@param item cmp-core.CompletionItem
+---@return string
+local function get_input(context, item)
+  return vim.api.nvim_get_current_line():sub(item:get_offset(), context.character)
+end
+
 describe('cmp-core.core', function()
   describe('CompletionItem', function()
-    local function get_input(context, item)
-      return vim.api.nvim_get_current_line():sub(item:get_offset(), context.character)
-    end
-
     it('should support dot-to-arrow completion (clangd)', function()
       local context, item = spec.setup({
         input = 'p',
@@ -17,16 +34,7 @@ describe('cmp-core.core', function()
           label = 'prop',
           textEdit = {
             newText = '->prop',
-            range = {
-              start = {
-                line = 0,
-                character = 3,
-              },
-              ['end'] = {
-                line = 0,
-                character = 4,
-              },
-            },
+            range = range(0, 3, 0, 4),
           },
         },
       })
@@ -37,7 +45,7 @@ describe('cmp-core.core', function()
         assert.equals(item:get_filter_text(), '.prop')
         assert.equals(item:get_select_text(), '->prop')
         item:confirm({ replace = true }):await()
-        assert.equals('obj->prop', vim.api.nvim_get_current_line())
+        spec.assert({ 'obj->prop|' })
       end)
     end)
 
@@ -50,16 +58,7 @@ describe('cmp-core.core', function()
           filterText = '.Symbol',
           textEdit = {
             newText = '[Symbol]',
-            range = {
-              start = {
-                line = 0,
-                character = 2,
-              },
-              ['end'] = {
-                line = 0,
-                character = 3,
-              },
-            },
+            range = range(0, 2, 0, 3),
           },
         },
       })
@@ -70,7 +69,7 @@ describe('cmp-core.core', function()
         assert.equals(item:get_filter_text(), '.Symbol')
         assert.equals(item:get_select_text(), '[Symbol]')
         item:confirm({ replace = true }):await()
-        assert.equals('[][Symbol]', vim.api.nvim_get_current_line())
+        spec.assert({ '[][Symbol]|' })
       end)
     end)
 
@@ -86,16 +85,7 @@ describe('cmp-core.core', function()
           filterText = '\t</div',
           textEdit = {
             newText = '</div',
-            range = {
-              start = {
-                line = 0,
-                character = 0,
-              },
-              ['end'] = {
-                line = 0,
-                character = 3,
-              },
-            },
+            range = range(0, 0, 0, 3),
           },
         },
       })
@@ -107,6 +97,10 @@ describe('cmp-core.core', function()
         assert.equals(item:get_filter_text(), '</div')
         item:confirm({ replace = true }):await()
         assert.equals('</div>', vim.api.nvim_get_current_line())
+        spec.assert({
+          '<div>',
+          '</div|>',
+        })
       end)
     end)
 
@@ -125,26 +119,8 @@ describe('cmp-core.core', function()
           insertTextFormat = LSP.InsertTextFormat.Snippet,
           textEdit = {
             newText = 'dbg!("")',
-            insert = {
-              start = {
-                character = 5,
-                line = 2,
-              },
-              ['end'] = {
-                character = 8,
-                line = 2,
-              },
-            },
-            replace = {
-              start = {
-                character = 5,
-                line = 2,
-              },
-              ['end'] = {
-                character = 8,
-                line = 2,
-              },
-            },
+            insert = range(2, 5, 2, 8),
+            replace = range(2, 5, 2, 8),
           },
         },
         resolve = function(item)
@@ -152,16 +128,7 @@ describe('cmp-core.core', function()
           clone.additionalTextEdits = {
             {
               newText = '',
-              range = {
-                start = {
-                  character = 10,
-                  line = 1,
-                },
-                ['end'] = {
-                  character = 5,
-                  line = 2,
-                },
-              },
+              range = range(1, 10, 2, 5),
             },
           }
           return Async.resolve(clone)
@@ -174,7 +141,11 @@ describe('cmp-core.core', function()
         assert.equals(item:get_select_text(), 'dbg!')
         assert.equals(item:get_filter_text(), 'dbg')
         item:confirm({ replace = true }):await()
-        assert.equals('  let s = dbg!("")', vim.api.nvim_get_current_line())
+        spec.assert({
+          'fn main() {',
+          '  let s = dbg!("")|',
+          '}',
+        })
       end)
     end)
   end)

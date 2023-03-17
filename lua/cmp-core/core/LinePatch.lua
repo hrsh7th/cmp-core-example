@@ -3,6 +3,7 @@ local LSP = require('cmp-core.kit.LSP')
 local Position = require('cmp-core.kit.LSP.Position')
 local Keymap = require('cmp-core.kit.Vim.Keymap')
 
+---Move position by delta with consider buffer text and line changes.
 ---@param position cmp-core.kit.LSP.Position
 ---@param delta integer
 ---@return cmp-core.kit.LSP.Position

@@ -1,3 +1,4 @@
+---@diagnostic disable: invisible
 local spec = require('cmp-core.core.spec')
 local Keymap = require('cmp-core.kit.Vim.Keymap')
 local LinePatch = require('cmp-core.core.LinePatch')

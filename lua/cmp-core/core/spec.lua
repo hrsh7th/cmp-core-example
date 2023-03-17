@@ -3,6 +3,7 @@ local CompletionProvider = require('cmp-core.core.CompletionProvider')
 local CompletionItem = require('cmp-core.core.CompletionItem')
 local LineContext = require('cmp-core.core.LineContext')
 local Async = require('cmp-core.kit.Async')
+local assert = require('luassert')
 
 local spec = {}
 
@@ -87,6 +88,48 @@ function spec.setup(option)
   end
 
   return LineContext.create(), item
+end
+
+---@param buffer_text string[]
+function spec.assert(buffer_text)
+  ---@type { [1]: integer, [2]: integer }
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  for i = 1, #buffer_text do
+    local s = buffer_text[i]:find('|', 1, true)
+    if s then
+      cursor[1] = i
+      cursor[2] = s - 1
+      buffer_text[i] = buffer_text[i]:gsub('|', '')
+      break
+    end
+  end
+
+  local ok1, err1 = pcall(function()
+    assert.are.same(buffer_text, vim.api.nvim_buf_get_lines(0, 0, -1, false))
+  end)
+  local ok2, err2 = pcall(function()
+    assert.are.same(cursor, vim.api.nvim_win_get_cursor(0))
+  end)
+  if not ok1 or not ok2 then
+    local err = ''
+    if err1 then
+      if type(err1) == 'string' then
+        err = err .. '\n' .. err1
+      else
+        ---@diagnostic disable-next-line: need-check-nil
+        err = err .. err1.message
+      end
+    end
+    if err2 then
+      if type(err2) == 'string' then
+        err = err .. '\n' .. err2
+      else
+        ---@diagnostic disable-next-line: need-check-nil
+        err = err .. err2.message
+      end
+    end
+    error(err, 2)
+  end
 end
 
 return spec
