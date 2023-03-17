@@ -7,9 +7,9 @@ local LineContext = require('cmp-core.core.LineContext')
 local Character = require('cmp-core.core.Character')
 local SelectText = require('cmp-core.core.SelectText')
 
----@class cmp-core.CompletionItem
----@field private _context cmp-core.LineContext
----@field private _provider cmp-core.CompletionProvider
+---@class cmp-core.core.CompletionItem
+---@field private _context cmp-core.core.LineContext
+---@field private _provider cmp-core.core.CompletionProvider
 ---@field private _list cmp-core.kit.LSP.CompletionList
 ---@field private _item cmp-core.kit.LSP.CompletionItem
 ---@field private _resolved_item? cmp-core.kit.LSP.CompletionItem
@@ -18,8 +18,8 @@ local CompletionItem = {}
 CompletionItem.__index = CompletionItem
 
 ---Create new CompletionItem.
----@param context cmp-core.LineContext
----@param provider cmp-core.CompletionProvider
+---@param context cmp-core.core.LineContext
+---@param provider cmp-core.core.CompletionProvider
 ---@param list cmp-core.kit.LSP.CompletionList
 ---@param item cmp-core.kit.LSP.CompletionItem
 function CompletionItem.new(context, provider, list, item)
@@ -81,7 +81,7 @@ function CompletionItem:get_filter_text()
     local delta = self._provider:get_default_offset() - self:get_offset()
     if delta > 0 then
       local prefix = self._context.text:sub(self:get_offset(), self._provider:get_default_offset() - 1)
-      if text:find(prefix, 1, true) ~= 1 then
+      if text:sub(1, #prefix) ~= prefix then
         text = prefix .. text
       end
     end
@@ -159,7 +159,7 @@ function CompletionItem:confirm(option)
   option.replace = option.replace or false
 
   return Async.run(function()
-    local context --[[@as cmp-core.LineContext]]
+    local context --[[@as cmp-core.core.LineContext]]
 
     -- Set dot-repeat register.
     context = LineContext.create()
@@ -172,7 +172,7 @@ function CompletionItem:confirm(option)
     -- Make overwrite information.
     local before, after
     if option.replace then
-      local range = self:get_replace_range() or self:_max_range(self._provider:get_default_replace_range(), self:get_insert_range())
+      local range = self:get_replace_range() or self:_max_range(self._provider:get_default_replace_range(), self:get_insert_range()) --[[@as cmp-core.kit.LSP.Range]]
       before = self._context.character - range.start.character
       after = range['end'].character - self._context.character
     else
@@ -248,6 +248,9 @@ end
 ---@return cmp-core.kit.LSP.Range
 function CompletionItem:_convert_range_encoding(range)
   local from_encoding = self._provider:get_position_encoding_kind()
+  if from_encoding == LSP.PositionEncodingKind.UTF8 then
+    return range
+  end
   return {
     start = self._context.cache:ensure('CompletionItem:_convert_range_encoding:start:' .. range.start.character .. ':' .. from_encoding, function()
       return Position.to_utf8(self._context.text, range.start, from_encoding)
@@ -260,24 +263,20 @@ end
 
 ---Get expanded range.
 ---@param ... cmp-core.kit.LSP.Range?
+---@return cmp-core.kit.LSP.Range?
 function CompletionItem:_max_range(...)
-  local max = {
-    start = {
-      line = 0,
-      character = self._context.character,
-    },
-    ['end'] = {
-      line = 0,
-      character = self._context.character,
-    },
-  } --[[@as cmp-core.kit.LSP.Range]]
+  local max --[[@as cmp-core.kit.LSP.Range]]
   for _, range in ipairs({ ... }) do
     if range then
-      if range.start.character < max.start.character then
-        max.start.character = range.start.character
-      end
-      if max['end'].character < range['end'].character then
-        max['end'].character = range['end'].character
+      if not max then
+        max = range
+      else
+        if range.start.character < max.start.character then
+          max.start.character = range.start.character
+        end
+        if max['end'].character < range['end'].character then
+          max['end'].character = range['end'].character
+        end
       end
     end
   end

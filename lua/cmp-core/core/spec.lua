@@ -17,15 +17,21 @@ local spec = {}
 ---@field public item_defaults? cmp-core.kit.LSP.CompletionList.itemDefaults
 ---@field public item cmp-core.kit.LSP.CompletionItem
 
----@param option cmp-core.core.spec.setup.Option
----@return cmp-core.LineContext, cmp-core.CompletionItem
-function spec.setup(option)
-  option.mode = option.mode or 'i'
-
+---Reset test environment.
+function spec.reset()
   --Create buffer.
   vim.cmd.enew({ bang = true, args = {} })
   vim.o.virtualedit = 'onemore'
   vim.o.swapfile = false
+end
+
+---@param option cmp-core.core.spec.setup.Option
+---@return cmp-core.core.LineContext, cmp-core.core.CompletionItem
+function spec.setup(option)
+  option.mode = option.mode or 'i'
+
+  ---Reset test environment.
+  spec.reset()
 
   --Setup context and buffer text and cursor position.
   if option.mode == 'i' then

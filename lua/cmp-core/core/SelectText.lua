@@ -36,28 +36,25 @@ SelectText.Pairs = {
 ---@param insert_text string
 ---@return string
 function SelectText.create(insert_text)
-  local state = {
-    alnum = false,
-    pairs = {},
-  } --[[@as { alnum: boolean, pairs: string[] }]]
-
+  local is_alnum_consumed = false
+  local pairs_stack = {}
   for i = 1, #insert_text do
     local byte = insert_text:byte(i)
     local alnum = Character.is_alnum(byte)
 
-    if not state.alnum and SelectText.Pairs[byte] then
-      table.insert(state.pairs, SelectText.Pairs[byte])
+    if not is_alnum_consumed and SelectText.Pairs[byte] then
+      table.insert(pairs_stack, SelectText.Pairs[byte])
     end
-    if state.alnum and not alnum and #state.pairs == 0 then
+    if is_alnum_consumed and not alnum and #pairs_stack == 0 then
       if SelectText.StopCharacters[byte] then
         return insert_text:sub(1, i - 1)
       end
     else
-      state.alnum = state.alnum or alnum
+      is_alnum_consumed = is_alnum_consumed or alnum
     end
 
-    if byte == state.pairs[#state.pairs] then
-      table.remove(state.pairs, #state.pairs)
+    if byte == pairs_stack[#pairs_stack] then
+      table.remove(pairs_stack, #pairs_stack)
     end
   end
   return insert_text

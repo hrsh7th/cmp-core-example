@@ -17,8 +17,8 @@ local function range(sl, sc, el, ec)
   }
 end
 
----@param context cmp-core.LineContext
----@param item cmp-core.CompletionItem
+---@param context cmp-core.core.LineContext
+---@param item cmp-core.core.CompletionItem
 ---@return string
 local function get_input(context, item)
   return vim.api.nvim_get_current_line():sub(item:get_offset(), context.character)
