@@ -7,6 +7,8 @@ local LineContext = require('cmp-core.core.LineContext')
 local Character = require('cmp-core.core.Character')
 local SelectText = require('cmp-core.core.SelectText')
 
+---@alias cmp-core.core.ExpandSnippet fun(s: string, option: {})
+
 ---@class cmp-core.core.CompletionItem
 ---@field private _context cmp-core.core.LineContext
 ---@field private _provider cmp-core.core.CompletionProvider
@@ -152,22 +154,22 @@ function CompletionItem:execute()
 end
 
 ---Confirm item.
----@param option? { replace?: boolean }
+---@param option? { replace?: boolean, expand_snippet?: cmp-core.core.ExpandSnippet }
 ---@return cmp-core.kit.Async.AsyncTask
 function CompletionItem:confirm(option)
   option = option or {}
   option.replace = option.replace or false
 
   return Async.run(function()
-    local context --[[@as cmp-core.core.LineContext]]
+    local current_context --[[@as cmp-core.core.LineContext]]
 
     -- Set dot-repeat register.
-    context = LineContext.create()
-    LinePatch.apply_by_keys(context.character - (self:get_offset() - 1), 0, self:get_select_text()):await()
+    current_context = LineContext.create()
+    LinePatch.apply_by_keys(current_context.character - (self:get_offset() - 1), 0, self:get_select_text()):await()
 
     -- Restore the requested state.
-    context = LineContext.create()
-    LinePatch.apply_by_func(context.character - (self:get_offset() - 1), 0, self._context.text:sub(self:get_offset(), self._context.character)):await()
+    current_context = LineContext.create()
+    LinePatch.apply_by_func(current_context.character - (self:get_offset() - 1), 0, self._context.text:sub(self:get_offset(), self._context.character)):await()
 
     -- Make overwrite information.
     local before, after
@@ -187,7 +189,16 @@ function CompletionItem:confirm(option)
     end
 
     -- TODO: should accept snippet expansion function.
-    LinePatch.apply_by_func(before, after, self:get_insert_text()):await()
+    if self:get_insert_text_format() == LSP.InsertTextFormat.Snippet then
+      if option.expand_snippet then
+        LinePatch.apply_by_func(before, after, ''):await()
+        option.expand_snippet(self:get_insert_text(), {})
+      else
+        LinePatch.apply_by_func(before, after, self:get_insert_text()):await()
+      end
+    else
+      LinePatch.apply_by_func(before, after, self:get_insert_text()):await()
+    end
 
     -- Apply async additionalTextEdits if provided.
     if not self._item.additionalTextEdits then
@@ -269,7 +280,16 @@ function CompletionItem:_max_range(...)
   for _, range in ipairs({ ... }) do
     if range then
       if not max then
-        max = range
+        max = {
+          start = {
+            line = 0,
+            character = range.start.character,
+          },
+          ['end'] = {
+            line = 0,
+            character = range['end'].character,
+          }
+        }
       else
         if range.start.character < max.start.character then
           max.start.character = range.start.character

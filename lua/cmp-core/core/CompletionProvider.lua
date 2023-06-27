@@ -1,6 +1,7 @@
 local LSP = require('cmp-core.kit.LSP')
 local Async = require('cmp-core.kit.Async')
 local RegExp = require('cmp-core.kit.Vim.RegExp')
+local CompletionItem = require('cmp-core.core.CompletionItem')
 
 ---@class cmp-core.core.CompletionSource
 ---@field public get_keyword_pattern? fun(self: unknown): string
@@ -9,6 +10,10 @@ local RegExp = require('cmp-core.kit.Vim.RegExp')
 ---@field public resolve? fun(self: unknown, item: cmp-core.kit.LSP.CompletionItem): cmp-core.kit.Async.AsyncTask
 ---@field public execute? fun(self: unknown, command: cmp-core.kit.LSP.Command): cmp-core.kit.Async.AsyncTask
 ---@field public complete fun(self: unknown, completion_context: cmp-core.kit.LSP.CompletionContext): cmp-core.kit.Async.AsyncTask
+
+---@class cmp-core.core.CompletionState
+---@field public incomplete boolean
+---@field public items cmp-core.core.CompletionItem[]
 
 ---Normalize response.
 ---@param response (cmp-core.kit.LSP.CompletionList|cmp-core.kit.LSP.CompletionItem[])?
@@ -39,7 +44,7 @@ end
 ---@class cmp-core.core.CompletionProvider
 ---@field private _source cmp-core.core.CompletionSource
 ---@field private _context? cmp-core.core.LineContext
----@field private _list? cmp-core.kit.LSP.CompletionList
+---@field private _state? cmp-core.core.CompletionState
 local CompletionProvider = {}
 CompletionProvider.__index = CompletionProvider
 
@@ -78,20 +83,26 @@ end
 ---@param force boolean?
 ---@return cmp-core.kit.Async.AsyncTask cmp-core.kit.LSP.CompletionList
 function CompletionProvider:complete(context, force)
-  local completion_context = self:_create_completion_context(context, force)
+  local completion_context = self:_ensure_completion_context(context, force)
   if not completion_context then
     return Async.resolve()
   end
 
-  self._context = context
-  return self._source
-      :complete(completion_context)
-      :next(function(response)
-        return normalize_response(response)
-      end)
-      :next(function(list)
-        return list
-      end)
+  return Async.run(function()
+    local response = self._source:complete(completion_context):await()
+    -- Skip for new context.
+    if self._context ~= context then
+      return
+    end
+
+    response = normalize_response(response)
+    self._state = {}
+    self._state.incomplete = response.isIncomplete or false
+    self._state.items = {}
+    for _, item in ipairs(response.items) do
+      table.insert(self._state.items, CompletionItem.new(context, self, response, item))
+    end
+  end)
 end
 
 ---Resolve completion item (completionItem/resolve).
@@ -120,7 +131,7 @@ function CompletionProvider:get_keyword_pattern()
   if self._source.get_keyword_pattern then
     return self._source:get_keyword_pattern()
   end
-  return [[\h\?\w*]]
+  return [[\%(-\?\d\+\%(\.\d\+\)\?\|\h\w*\%(-\w*\)*\)]]
 end
 
 ---Return default offest position.
@@ -181,11 +192,11 @@ function CompletionProvider:get_default_replace_range()
   end)
 end
 
----Create CompletionContext.
+---Ensure CompletionContext.
 ---@param context cmp-core.core.LineContext
 ---@param force boolean?
 ---@return cmp-core.kit.LSP.CompletionContext
-function CompletionProvider:_create_completion_context(context, force)
+function CompletionProvider:_ensure_completion_context(context, force)
   local completion_options = self:get_completion_options()
   local trigger_characters = completion_options.triggerCharacters or {}
 
@@ -206,15 +217,11 @@ function CompletionProvider:_create_completion_context(context, force)
       local keyword_pattern = self:get_keyword_pattern()
       local keyword_offset = context:get_keyword_offset(keyword_pattern)
       if keyword_offset then
-        if is_incomplete then
+        if is_incomplete and self._context then
           completion_context = {
             triggerKind = LSP.CompletionTriggerKind.TriggerForIncompleteCompletions,
           }
         elseif not self._context or keyword_offset ~= self._context:get_keyword_offset(keyword_pattern) then
-          vim.print({
-            new_keyword_offset = keyword_offset,
-            old_keyword_offset = self._context and self._context:get_keyword_offset(keyword_pattern),
-          })
           completion_context = {
             triggerKind = LSP.CompletionTriggerKind.Invoked,
           }

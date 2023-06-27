@@ -78,10 +78,7 @@ function spec.setup(option)
       })
     end,
   })
-
-  -- Construct item.
-  local list = provider:complete(context):sync() --[[@as cmp-core.kit.LSP.CompletionList]]
-  local item = CompletionItem.new(context, provider, list, list.items[1])
+  provider:complete(context):sync()
 
   -- Insert filtering query after request.
   if option.mode ~= 'c' and option.input then
@@ -93,7 +90,8 @@ function spec.setup(option)
     vim.api.nvim_win_set_cursor(0, { row, col + #option.input })
   end
 
-  return LineContext.create(), item
+  ---@diagnostic disable-next-line: invisible
+  return LineContext.create(), provider._state.items[1]
 end
 
 ---@param buffer_text string[]
