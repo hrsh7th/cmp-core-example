@@ -10,20 +10,19 @@ local CompletionProvider = require('cmp-core.core.CompletionProvider')
 ---@return cmp-core.core.CompletionProvider, fun(response: cmp-core.kit.LSP.CompletionList)
 local function create_provider(option)
   option = option or {}
+
+  local response ---@type cmp-core.kit.LSP.CompletionList
   local provider = CompletionProvider.new({
     get_keyword_pattern = function(_)
       return option.keyword_pattern or [[\%(-\?\d\+\%(\.\d\+\)\?\|\h\w*\%(-\w*\)*\)]]
     end,
     complete = function(_)
-      return Async.resolve({
-        items = {},
-        isIncomplete = false,
-      })
+      return Async.resolve(response)
     end,
   })
-  return provider, function(response)
-    ---@diagnostic disable-next-line: invisible
-    provider._list = response
+  ---@param response_ cmp-core.kit.LSP.CompletionList
+  return provider, function(response_)
+    response = response_
   end
 end
 
@@ -34,25 +33,27 @@ describe('cmp-core.core', function()
       Keymap.spec(function()
         Keymap.send('i'):await()
         -- should not complete.
-        assert.is_nil(provider:_ensure_completion_context(LineContext.create(), false))
+        assert.is_nil(provider:complete(LineContext.create(), false):await())
         Keymap.send(' '):await()
-        assert.is_nil(provider:_ensure_completion_context(LineContext.create(), false))
+        assert.is_nil(provider:complete(LineContext.create(), false):await())
 
         -- keyword_pattern -> keyword_pattern.
         Keymap.send('f'):await()
-        assert.are_not.is_nil(provider:_ensure_completion_context(LineContext.create(), false))
-        assert.is_nil(provider:_ensure_completion_context(LineContext.create(), false))
+        response({ isIncomplete = true, items = {} })
+        assert.are_not.is_nil(provider:complete(LineContext.create(), false):await())
 
         -- isIncomplete=true
-        response({ isIncomplete = true })
         Keymap.send('o'):await()
-        assert.are_not.is_nil(provider:_ensure_completion_context(LineContext.create(), false))
+        response({ isIncomplete = false, items = {} })
+        assert.are_not.is_nil(provider:complete(LineContext.create(), false):await())
 
         -- isIncomplete=false -> force=true
-        response({ isIncomplete = false })
         Keymap.send('o'):await()
-        assert.is_nil(provider:_ensure_completion_context(LineContext.create(), false))
-        assert.are_not.is_nil(provider:_ensure_completion_context(LineContext.create(), true))
+        assert.are_not.is_nil(provider:complete(LineContext.create(), true):await())
+
+        -- isIncomplete=false -> force=false
+        Keymap.send('o'):await()
+        assert.is_nil(provider:complete(LineContext.create(), false):await())
       end)
     end)
   end)

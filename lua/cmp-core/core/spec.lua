@@ -78,7 +78,7 @@ function spec.setup(option)
       })
     end,
   })
-  provider:complete(context):sync()
+  provider:complete(context, true):sync()
 
   -- Insert filtering query after request.
   if option.mode ~= 'c' and option.input then

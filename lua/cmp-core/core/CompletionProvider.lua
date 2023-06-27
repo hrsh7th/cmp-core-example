@@ -83,12 +83,12 @@ end
 ---@param force boolean?
 ---@return cmp-core.kit.Async.AsyncTask cmp-core.kit.LSP.CompletionList
 function CompletionProvider:complete(context, force)
-  local completion_context = self:_ensure_completion_context(context, force)
-  if not completion_context then
-    return Async.resolve()
-  end
-
   return Async.run(function()
+    local completion_context = self:_ensure_completion_context(context, force)
+    if not completion_context then
+      return
+    end
+
     local response = self._source:complete(completion_context):await()
     -- Skip for new context.
     if self._context ~= context then
@@ -102,6 +102,8 @@ function CompletionProvider:complete(context, force)
     for _, item in ipairs(response.items) do
       table.insert(self._state.items, CompletionItem.new(context, self, response, item))
     end
+
+    return completion_context
   end)
 end
 
@@ -119,7 +121,7 @@ end
 ---@param command cmp-core.kit.LSP.Command
 ---@return cmp-core.kit.Async.AsyncTask
 function CompletionProvider:execute(command)
-  if not self._source.resolve then
+  if not self._source.execute then
     return Async.resolve()
   end
   return self._source:execute(command)
@@ -213,7 +215,7 @@ function CompletionProvider:_ensure_completion_context(context, force)
         triggerKind = LSP.CompletionTriggerKind.Invoked,
       }
     else
-      local is_incomplete = self._list and self._list.isIncomplete
+      local is_incomplete = self._state and self._state.incomplete
       local keyword_pattern = self:get_keyword_pattern()
       local keyword_offset = context:get_keyword_offset(keyword_pattern)
       if keyword_offset then

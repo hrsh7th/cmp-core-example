@@ -1,3 +1,4 @@
+local kit = require('cmp-core.kit')
 local LSP = require('cmp-core.kit.LSP')
 local Cache = require('cmp-core.kit.App.Cache')
 local Async = require('cmp-core.kit.Async')
@@ -135,7 +136,13 @@ function CompletionItem:resolve()
     local resolved_item = self._cache
         :ensure('resolve', function()
           if self._provider.resolve then
-            return self._provider:resolve(self._item)
+            local item = kit.merge({}, self._item)
+            for k, v in pairs(self._list.itemDefaults or {}) do
+              if not item[k] and k ~= 'editRange' then
+                item[k] = v
+              end
+            end
+            return self._provider:resolve(item)
           end
           return Async.resolve(self._item)
         end)
@@ -150,7 +157,10 @@ end
 ---Execute command (workspace/executeCommand).
 ---@return cmp-core.kit.Async.AsyncTask
 function CompletionItem:execute()
-  return self._provider:execute(self._item.command)
+  if self._provider.execute then
+    return self._provider:execute(self._item.command)
+  end
+  return Async.resolve()
 end
 
 ---Confirm item.
@@ -161,11 +171,17 @@ function CompletionItem:confirm(option)
   option.replace = option.replace or false
 
   return Async.run(function()
+    -- Try resolve item.
+    Async.race({ self:resolve(), Async.timeout(200) }):await()
+
     local current_context --[[@as cmp-core.core.LineContext]]
 
     -- Set dot-repeat register.
     current_context = LineContext.create()
     LinePatch.apply_by_keys(current_context.character - (self:get_offset() - 1), 0, self:get_select_text()):await()
+
+    -- Save undopoint.
+    vim.o.undolevels = vim.o.undolevels
 
     -- Restore the requested state.
     current_context = LineContext.create()
@@ -207,6 +223,9 @@ function CompletionItem:confirm(option)
         vim.lsp.util.apply_text_edits(resolved_item.additionalTextEdits, 0, LSP.PositionEncodingKind.UTF8)
       end
     end
+
+    -- Execute command.
+    self:execute():await()
   end)
 end
 
@@ -280,16 +299,7 @@ function CompletionItem:_max_range(...)
   for _, range in ipairs({ ... }) do
     if range then
       if not max then
-        max = {
-          start = {
-            line = 0,
-            character = range.start.character,
-          },
-          ['end'] = {
-            line = 0,
-            character = range['end'].character,
-          }
-        }
+        max = range
       else
         if range.start.character < max.start.character then
           max.start.character = range.start.character
