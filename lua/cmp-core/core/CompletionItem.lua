@@ -14,9 +14,9 @@ local SelectText = require('cmp-core.core.SelectText')
 ---@field private _context cmp-core.core.LineContext
 ---@field private _provider cmp-core.core.CompletionProvider
 ---@field private _list cmp-core.kit.LSP.CompletionList
----@field private _item cmp-core.kit.LSP.CompletionItem
----@field private _resolved_item? cmp-core.kit.LSP.CompletionItem
 ---@field private _cache cmp-core.kit.App.Cache
+---@field private _item cmp-core.kit.LSP.CompletionItem
+---@field private _resolving cmp-core.kit.Async.AsyncTask
 local CompletionItem = {}
 CompletionItem.__index = CompletionItem
 
@@ -30,23 +30,22 @@ function CompletionItem.new(context, provider, list, item)
   self._context = context
   self._provider = provider
   self._list = list
-  self._item = item
-  self._resolved_item = nil
   self._cache = Cache.new()
+  self._item = item
+  self._resolving = nil
   return self
 end
 
 ---Get sugest offset position 1-origin utf-8 byte index.
----NOTE: This is not part of LSP spec.
----TODO: We should support sementic offset calculation (nvim-cmp did it).
+---NOTE: VSCode always shows the completion menu relative to the cursor position. This is vim specific implementation.
 ---@return number
 function CompletionItem:get_offset()
   local default_offset = self._provider:get_default_offset()
-
-  local insert_range = self:get_insert_range()
-  if not insert_range then
+  if not self:has_text_edit() then
     return default_offset
   end
+
+  local insert_range = self:get_insert_range()
   return self._context.cache:ensure('get_offset:' .. insert_range.start.character, function()
     local offset = insert_range.start.character + 1
     for i = offset, default_offset do
@@ -60,7 +59,7 @@ function CompletionItem:get_offset()
 end
 
 ---Return select text that will be inserted if the item is selected.
----NOTE: This is not part of LSP spec.
+---NOTE: VSCode doesn't have the text inserted when item was selected. This is vim specific implementation.
 ---@reutrn string
 function CompletionItem:get_select_text()
   return self._cache:ensure('get_select_text', function()
@@ -81,6 +80,8 @@ function CompletionItem:get_filter_text()
     end
     text = text:gsub('^%s+', ''):gsub('%s+$', '')
 
+
+    -- Fix filter_text for non-VSCode compliant servers such as clangd.
     local delta = self._provider:get_default_offset() - self:get_offset()
     if delta > 0 then
       local prefix = self._context.text:sub(self:get_offset(), self._provider:get_default_offset() - 1)
@@ -132,25 +133,28 @@ end
 ---Resolve completion item (completionItem/resolve).
 ---@return cmp-core.kit.Async.AsyncTask
 function CompletionItem:resolve()
+  if not self._provider.resolve then
+    return Async.resolve()
+  end
+
   return Async.run(function()
-    local resolved_item = self._cache
-        :ensure('resolve', function()
-          if self._provider.resolve then
-            local item = kit.merge({}, self._item)
-            for k, v in pairs(self._list.itemDefaults or {}) do
-              if not item[k] and k ~= 'editRange' then
-                item[k] = v
-              end
-            end
-            return self._provider:resolve(item)
-          end
-          return Async.resolve(self._item)
-        end)
-        :await()
-    if not resolved_item then
-      self._cache:del('resolve')
+    self._resolving = self._resolving or (function()
+      local item = kit.merge({}, self._item)
+      for k, v in pairs(self._list.itemDefaults or {}) do
+        if not item[k] and k ~= 'editRange' then
+          item[k] = v
+        end
+      end
+      return self._provider:resolve(item)
+    end)()
+
+    local resolved_item = self._resolving:await()
+    if resolved_item then
+      self._item = kit.merge(self._item, resolved_item)
+      self._cache = Cache.new()
+    else
+      self._resolving = nil
     end
-    return resolved_item or self._item
   end)
 end
 
@@ -188,39 +192,50 @@ function CompletionItem:confirm(option)
     LinePatch.apply_by_func(current_context.character - (self:get_offset() - 1), 0, self._context.text:sub(self:get_offset(), self._context.character)):await()
 
     -- Make overwrite information.
-    local before, after
-    if option.replace then
-      local range = self:get_replace_range() or self:_max_range(self._provider:get_default_replace_range(), self:get_insert_range()) --[[@as cmp-core.kit.LSP.Range]]
-      before = self._context.character - range.start.character
-      after = range['end'].character - self._context.character
-    else
-      local range = (self:get_insert_range() or self._provider:get_default_insert_range())
-      before = self._context.character - range.start.character
-      after = range['end'].character - self._context.character
-    end
+    local range = option.replace and self:get_replace_range() or self:get_insert_range()
+    local before = self._context.character - range.start.character
+    local after = range['end'].character - self._context.character
 
     -- Apply sync additionalTextEdits if provied.
     if self._item.additionalTextEdits then
-      vim.lsp.util.apply_text_edits(self._item.additionalTextEdits, 0, LSP.PositionEncodingKind.UTF8)
+      vim.lsp.util.apply_text_edits(kit.map(self._item.additionalTextEdits, function(text_edit)
+        return kit.merge({
+          range = self:_convert_range_encoding(text_edit.range)
+        }, text_edit)
+      end), 0, LSP.PositionEncodingKind.UTF8)
     end
 
-    -- TODO: should accept snippet expansion function.
-    if self:get_insert_text_format() == LSP.InsertTextFormat.Snippet then
-      if option.expand_snippet then
-        LinePatch.apply_by_func(before, after, ''):await()
-        option.expand_snippet(self:get_insert_text(), {})
-      else
-        LinePatch.apply_by_func(before, after, self:get_insert_text()):await()
-      end
+    -- Expansion.
+    if self:get_insert_text_format() == LSP.InsertTextFormat.Snippet and option.expand_snippet then
+      -- remove range of text and expand snippet.
+      LinePatch.apply_by_func(before, after, ''):await()
+      option.expand_snippet(self:get_insert_text(), {})
     else
+      -- insert text to range.
       LinePatch.apply_by_func(before, after, self:get_insert_text()):await()
     end
 
     -- Apply async additionalTextEdits if provided.
     if not self._item.additionalTextEdits then
-      local resolved_item = self:resolve():await()
-      if resolved_item.additionalTextEdits then
-        vim.lsp.util.apply_text_edits(resolved_item.additionalTextEdits, 0, LSP.PositionEncodingKind.UTF8)
+      do
+        local prev_context = LineContext.create()
+        self:resolve():next(function()
+          if self._item.additionalTextEdits then
+            local next_context = LineContext.create()
+            local is_skipped = false
+            is_skipped = is_skipped or (prev_context.line ~= next_context.line)
+            is_skipped = is_skipped or #vim.iter(self._item.additionalTextEdits):filter(function(text_edit)
+              return text_edit.range.start.line >= next_context.line
+            end) > 0
+            if not is_skipped then
+              vim.lsp.util.apply_text_edits(kit.map(self._item.additionalTextEdits, function(text_edit)
+                return kit.merge({
+                  range = self:_convert_range_encoding(text_edit.range)
+                }, text_edit)
+              end), 0, LSP.PositionEncodingKind.UTF8)
+            end
+          end
+        end)
       end
     end
 
@@ -229,10 +244,19 @@ function CompletionItem:confirm(option)
   end)
 end
 
+---Return this has textEdit or not.
+---@return boolean
+function CompletionItem:has_text_edit()
+  return not not (
+    self._item.textEdit or
+    (self._list.itemDefaults and self._list.itemDefaults.editRange)
+  )
+end
+
 ---Return insert range.
 ---NOTE: The line property can't be used. This is usually 0.
 ---NOTE: This range is utf-8 byte length based.
----@return cmp-core.kit.LSP.Range?
+---@return cmp-core.kit.LSP.Range
 function CompletionItem:get_insert_range()
   local range --[[@as cmp-core.kit.LSP.Range]]
   if self._item.textEdit then
@@ -248,15 +272,16 @@ function CompletionItem:get_insert_range()
       range = self._list.itemDefaults.editRange
     end
   end
-  if range then
-    return self:_convert_range_encoding(range)
+  if not range then
+    range = self._provider:get_default_insert_range()
   end
+  return self:_convert_range_encoding(range)
 end
 
 ---Return replace range.
 ---NOTE: The line property can't be used. This is usually 0.
 ---NOTE: This range is utf-8 byte length based.
----@return cmp-core.kit.LSP.Range?
+---@return cmp-core.kit.LSP.Range
 function CompletionItem:get_replace_range()
   local range --[[@as cmp-core.kit.LSP.Range]]
   if self._item.textEdit then
@@ -268,9 +293,10 @@ function CompletionItem:get_replace_range()
       range = self._list.itemDefaults.editRange.replace
     end
   end
-  if range then
-    return self:_convert_range_encoding(range)
+  if not range then
+    range = self:_max_range(self._provider:get_default_replace_range(), self:get_insert_range())
   end
+  return self:_convert_range_encoding(range)
 end
 
 ---Convert range encoding to LSP.PositionEncodingKind.UTF8.
@@ -292,11 +318,12 @@ function CompletionItem:_convert_range_encoding(range)
 end
 
 ---Get expanded range.
----@param ... cmp-core.kit.LSP.Range?
----@return cmp-core.kit.LSP.Range?
-function CompletionItem:_max_range(...)
+---@param range_ cmp-core.kit.LSP.Range
+---@param ... cmp-core.kit.LSP.Range
+---@return cmp-core.kit.LSP.Range
+function CompletionItem:_max_range(range_, ...)
   local max --[[@as cmp-core.kit.LSP.Range]]
-  for _, range in ipairs({ ... }) do
+  for _, range in ipairs({ range_, ... }) do
     if range then
       if not max then
         max = range

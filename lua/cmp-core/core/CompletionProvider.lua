@@ -15,10 +15,10 @@ local CompletionItem = require('cmp-core.core.CompletionItem')
 ---@field public incomplete boolean
 ---@field public items cmp-core.core.CompletionItem[]
 
----Normalize response.
+---Convert completion response to LSP.CompletionList.
 ---@param response (cmp-core.kit.LSP.CompletionList|cmp-core.kit.LSP.CompletionItem[])?
 ---@return cmp-core.kit.LSP.CompletionList
-local function normalize_response(response)
+local function to_completion_list(response)
   response = response or {}
   if response.items then
     return response
@@ -84,22 +84,27 @@ end
 ---@return cmp-core.kit.Async.AsyncTask cmp-core.kit.LSP.CompletionList
 function CompletionProvider:complete(context, force)
   return Async.run(function()
+    -- Check completion context.
     local completion_context = self:_ensure_completion_context(context, force)
     if not completion_context then
       return
     end
+    self._context = context
 
+    -- Invoke completion.
     local response = self._source:complete(completion_context):await()
+
     -- Skip for new context.
     if self._context ~= context then
       return
     end
 
-    response = normalize_response(response)
-    self._state = {}
-    self._state.incomplete = response.isIncomplete or false
+    -- Adopt response.
+    local list = to_completion_list(response)
+    self._state = {} ---@type cmp-core.core.CompletionState
+    self._state.incomplete = list.isIncomplete or false
     self._state.items = {}
-    for _, item in ipairs(response.items) do
+    for _, item in ipairs(list.items) do
       table.insert(self._state.items, CompletionItem.new(context, self, response, item))
     end
 
@@ -204,13 +209,16 @@ function CompletionProvider:_ensure_completion_context(context, force)
 
   ---@type cmp-core.kit.LSP.CompletionContext
   local completion_context
+
   if vim.tbl_contains(trigger_characters, context.char) then
+    -- invoke completion if triggerCharacters contains the context.char.
     completion_context = {
       triggerKind = LSP.CompletionTriggerKind.TriggerCharacter,
       triggerCharacter = context.char,
     }
   else
     if force then
+      -- invoke completion if force is true. (manual completion)
       completion_context = {
         triggerKind = LSP.CompletionTriggerKind.Invoked,
       }
@@ -218,12 +226,16 @@ function CompletionProvider:_ensure_completion_context(context, force)
       local is_incomplete = self._state and self._state.incomplete
       local keyword_pattern = self:get_keyword_pattern()
       local keyword_offset = context:get_keyword_offset(keyword_pattern)
+
+      -- check keyword pattern is matched or not.
       if keyword_offset then
-        if is_incomplete and self._context then
+        if is_incomplete then
+          -- invoke completion if previous response specifies the `isIncomplete=true`.
           completion_context = {
             triggerKind = LSP.CompletionTriggerKind.TriggerForIncompleteCompletions,
           }
         elseif not self._context or keyword_offset ~= self._context:get_keyword_offset(keyword_pattern) then
+          -- invoke completion if matched the new keyword or keyword offset is changed.
           completion_context = {
             triggerKind = LSP.CompletionTriggerKind.Invoked,
           }
@@ -231,7 +243,6 @@ function CompletionProvider:_ensure_completion_context(context, force)
       end
     end
   end
-  self._context = context
   return completion_context
 end
 

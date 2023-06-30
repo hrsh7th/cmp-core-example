@@ -1,6 +1,5 @@
 local LSP = require('cmp-core.kit.LSP')
 local CompletionProvider = require('cmp-core.core.CompletionProvider')
-local CompletionItem = require('cmp-core.core.CompletionItem')
 local LineContext = require('cmp-core.core.LineContext')
 local Async = require('cmp-core.kit.Async')
 local assert = require('luassert')
@@ -8,14 +7,14 @@ local assert = require('luassert')
 local spec = {}
 
 ---@class cmp-core.core.spec.setup.Option
+---@field public buffer_text string[]
 ---@field public mode? 'i' | 'c'
 ---@field public input? string
----@field public buffer_text string[]
 ---@field public keyword_pattern? string
 ---@field public position_encoding_kind? cmp-core.kit.LSP.PositionEncodingKind
 ---@field public resolve? fun(item: cmp-core.kit.LSP.CompletionItem): cmp-core.kit.Async.AsyncTask cmp-core.kit.LSP.CompletionItem
 ---@field public item_defaults? cmp-core.kit.LSP.CompletionList.itemDefaults
----@field public item cmp-core.kit.LSP.CompletionItem
+---@field public item? cmp-core.kit.LSP.CompletionItem
 
 ---Reset test environment.
 function spec.reset()

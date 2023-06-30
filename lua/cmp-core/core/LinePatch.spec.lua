@@ -18,7 +18,7 @@ describe('cmp-core.core', function()
                 label = 'concat',
               },
             })
-            local range = (item:get_insert_range() or item._provider:get_default_insert_range())
+            local range = item:get_insert_range()
             local before = context.character - range.start.character
             local after = range['end'].character - context.character
             LinePatch[fn](before, after, item:get_insert_text()):await()
@@ -59,7 +59,7 @@ describe('cmp-core.core', function()
                 label = 'concat',
               },
             })
-            local range = (item:get_insert_range() or item._provider:get_default_insert_range())
+            local range = item:get_insert_range()
             local before = context.character - range.start.character
             local after = range['end'].character - context.character
             LinePatch[fn](before, after, item:get_insert_text()):await()
