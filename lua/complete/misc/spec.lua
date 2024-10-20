@@ -54,11 +54,16 @@ function spec.setup(option)
 
   -- Create completion provider with specified item.
   local provider = CompletionProvider.new({
+    initialize = function(_, params)
+      params.configure({
+        keyword_pattern = option.keyword_pattern or [[\%(-\?\d\+\%(\.\d\+\)\?\|\h\w*\%(-\w*\)*\)]],
+        completion_options = {
+          triggerCharacters = { '.' }
+        }
+      })
+    end,
     get_position_encoding_kind = function(_)
       return option.position_encoding_kind or LSP.PositionEncodingKind.UTF8
-    end,
-    get_keyword_pattern = function(_)
-      return option.keyword_pattern or [[\%(-\?\d\+\%(\.\d\+\)\?\|\h\w*\%(-\w*\)*\)]]
     end,
     resolve = function(_, item)
       if not option.resolve then

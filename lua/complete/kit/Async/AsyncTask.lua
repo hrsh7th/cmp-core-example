@@ -144,7 +144,7 @@ end
 
 ---Sync async task.
 ---@NOTE: This method uses `vim.wait` so that this can't wait the typeahead to be empty.
----@param timeout? number
+---@param timeout? integer
 ---@return any
 function AsyncTask:sync(timeout)
   timeout = timeout or 1000

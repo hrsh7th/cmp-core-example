@@ -41,7 +41,7 @@ local LinePatch = {}
 ---@param after integer 0-origin utf8 byte count
 ---@param insert_text string
 function LinePatch.apply_by_func(bufnr, before, after, insert_text)
-  local mode = vim.api.nvim_get_mode().mode
+  local mode = vim.api.nvim_get_mode().mode --[[@as string]]
   if mode == 'i' then
     local text_edit = {
       range = {

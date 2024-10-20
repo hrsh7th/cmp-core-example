@@ -1,6 +1,5 @@
 local kit = require('complete.kit')
 local LSP = require('complete.kit.LSP')
-local Cache = require('complete.kit.App.Cache')
 local Async = require('complete.kit.Async')
 local Position = require('complete.kit.LSP.Position')
 local LinePatch = require('complete.core.LinePatch')
@@ -15,8 +14,8 @@ local SnippetText = require('complete.core.SnippetText')
 ---@field private _trigger_context complete.core.TriggerContext
 ---@field private _provider complete.core.CompletionProvider
 ---@field private _completion_list complete.kit.LSP.CompletionList
----@field private _cache complete.kit.App.Cache
 ---@field private _item complete.kit.LSP.CompletionItem
+---@field private _cache table<string, any>
 ---@field private _resolving complete.kit.Async.AsyncTask
 local CompletionItem = {}
 CompletionItem.__index = CompletionItem
@@ -31,67 +30,69 @@ function CompletionItem.new(trigger_context, provider, list, item)
   self._trigger_context = trigger_context
   self._provider = provider
   self._completion_list = list
-  self._cache = Cache.new()
   self._item = item
+  self._cache = {}
   self._resolving = nil
   return self
 end
 
----Get sugest offset position 1-origin utf-8 byte index.
+---Get suggest offset position 1-origin utf-8 byte index.
 ---NOTE: VSCode always shows the completion menu relative to the cursor position. This is vim specific implementation.
 ---@return number
 function CompletionItem:get_offset()
-  local default_offset = self._provider:get_default_offset()
+  local keyword_offset = self._provider:get_keyword_offset()
   if not self:has_text_edit() then
-    return default_offset
+    return keyword_offset
   end
 
   local insert_range = self:get_insert_range()
-  return self._trigger_context.cache:ensure('get_offset:' .. insert_range.start.character, function()
+  local cache_key = string.format('%s:%s:%s', 'get_offset', keyword_offset, insert_range.start.character)
+  if not self._trigger_context.cache[cache_key] then
     local offset = insert_range.start.character + 1
-    for i = offset, default_offset do
+    for i = offset, keyword_offset do
       offset = i
       if not Character.is_white(self._trigger_context.text:byte(i)) then
         break
       end
     end
-    return math.min(offset, default_offset)
-  end)
+    self._trigger_context.cache[cache_key] = math.min(offset, keyword_offset)
+  end
+  return self._trigger_context.cache[cache_key]
 end
 
 ---Return select text that will be inserted if the item is selected.
 ---NOTE: VSCode doesn't have the text inserted when item was selected. This is vim specific implementation.
 ---@reutrn string
 function CompletionItem:get_select_text()
-  return self._cache:ensure('get_select_text', function()
+  local cache_key = 'get_select_text'
+  if not self._cache[cache_key] then
     local text = self:get_insert_text()
     if self:get_insert_text_format() == LSP.InsertTextFormat.Snippet then
       text = tostring(SnippetText.parse(text)) --[[@as string]]
     end
-    return SelectText.create(text)
-  end)
+    self._cache[cache_key] = SelectText.create(text)
+  end
+  return self._cache[cache_key]
 end
 
 ---Return filter text that will be used for matching.
 function CompletionItem:get_filter_text()
-  return self._cache:ensure('get_filter_text', function()
-    local text = self._item.filterText
-    if not text then
-      text = self._item.label
-    end
+  local cache_key = 'get_filter_text'
+  if not self._cache[cache_key] then
+    local text = self._item.filterText or self._item.label
     text = text:gsub('^%s+', ''):gsub('%s+$', '')
 
-
     -- Fix filter_text for non-VSCode compliant servers such as clangd.
-    local delta = self._provider:get_default_offset() - self:get_offset()
+    local delta = self._provider:get_keyword_offset() - self:get_offset()
     if delta > 0 then
-      local prefix = self._trigger_context.text:sub(self:get_offset(), self._provider:get_default_offset() - 1)
+      local prefix = self._trigger_context.text:sub(self:get_offset(), self._provider:get_keyword_offset() - 1)
       if text:sub(1, #prefix) ~= prefix then
         text = prefix .. text
       end
     end
-    return text
-  end)
+    self._cache[cache_key] = text
+  end
+  return self._cache[cache_key]
 end
 
 ---Return insert text that will be inserted if the item is confirmed.
@@ -138,25 +139,19 @@ function CompletionItem:resolve()
     return Async.resolve()
   end
 
-  return Async.run(function()
-    self._resolving = self._resolving or (function()
-      local item = kit.merge({}, self._item)
-      for k, v in pairs(self._completion_list.itemDefaults or {}) do
-        if not item[k] and k ~= 'editRange' then
-          item[k] = v
-        end
+  self._resolving = self._resolving or (function()
+    return self._provider:resolve(kit.merge({}, self._item)):next(function(resolved_item)
+      if resolved_item then
+        -- Merge resolved item to original item.
+        self._item = kit.merge(self._item, resolved_item)
+        self._cache = {}
+      else
+        -- Clear resolving cache if null was returned from server.
+        self._resolving = nil
       end
-      return self._provider:resolve(item)
-    end)()
-
-    local resolved_item = self._resolving:await()
-    if resolved_item then
-      self._item = kit.merge(self._item, resolved_item)
-      self._cache = Cache.new() -- clear all caches for new item.
-    else
-      self._resolving = nil
-    end
-  end)
+    end)
+  end)()
+  return self._resolving
 end
 
 ---Execute command (workspace/executeCommand).
@@ -206,13 +201,13 @@ function CompletionItem:commit(option)
       end), bufnr, LSP.PositionEncodingKind.UTF8)
     end
 
-    -- Expansion.
+    -- Expansion (Snippet / PlainText).
     if self:get_insert_text_format() == LSP.InsertTextFormat.Snippet and option.expand_snippet then
-      -- remove range of text and expand snippet.
+      -- Snippet: remove range of text and expand snippet.
       LinePatch.apply_by_func(bufnr, before, after, ''):await()
       option.expand_snippet(self:get_insert_text(), {})
     else
-      -- insert text.
+      -- PlainText: insert text.
       LinePatch.apply_by_func(bufnr, before, after, self:get_insert_text()):await()
     end
 
@@ -261,24 +256,29 @@ end
 ---NOTE: This range is utf-8 byte length based.
 ---@return complete.kit.LSP.Range
 function CompletionItem:get_insert_range()
-  local range --[[@as complete.kit.LSP.Range]]
-  if self._item.textEdit then
-    if self._item.textEdit.insert then
-      range = self._item.textEdit.insert
-    else
-      range = self._item.textEdit.range
+  local cache_key = 'get_insert_range'
+  if not self._cache[cache_key] then
+    local range --[[@as complete.kit.LSP.Range]]
+    if self._item.textEdit then
+      if self._item.textEdit.insert then
+        range = self._item.textEdit.insert
+      else
+        range = self._item.textEdit.range
+      end
+    elseif self._completion_list.itemDefaults and self._completion_list.itemDefaults.editRange then
+      if self._completion_list.itemDefaults.editRange.insert then
+        range = self._completion_list.itemDefaults.editRange.insert
+      else
+        range = self._completion_list.itemDefaults.editRange
+      end
     end
-  elseif self._completion_list.itemDefaults and self._completion_list.itemDefaults.editRange then
-    if self._completion_list.itemDefaults.editRange.insert then
-      range = self._completion_list.itemDefaults.editRange.insert
+    if range then
+      self._cache[cache_key] = self:_convert_range_encoding(range)
     else
-      range = self._completion_list.itemDefaults.editRange
+      self._cache[cache_key] = self._provider:get_default_insert_range()
     end
   end
-  if not range then
-    range = self._provider:get_default_insert_range()
-  end
-  return self:_convert_range_encoding(range)
+  return self._cache[cache_key]
 end
 
 ---Return replace range.
@@ -286,20 +286,25 @@ end
 ---NOTE: This range is utf-8 byte length based.
 ---@return complete.kit.LSP.Range
 function CompletionItem:get_replace_range()
-  local range --[[@as complete.kit.LSP.Range]]
-  if self._item.textEdit then
-    if self._item.textEdit.replace then
-      range = self._item.textEdit.replace
+  local cache_key = 'get_replace_range'
+  if not self._cache[cache_key] then
+    local range --[[@as complete.kit.LSP.Range]]
+    if self._item.textEdit then
+      if self._item.textEdit.replace then
+        range = self._item.textEdit.replace
+      end
+    elseif self._completion_list.itemDefaults and self._completion_list.itemDefaults.editRange then
+      if self._completion_list.itemDefaults.editRange.replace then
+        range = self._completion_list.itemDefaults.editRange.replace
+      end
     end
-  elseif self._completion_list.itemDefaults and self._completion_list.itemDefaults.editRange then
-    if self._completion_list.itemDefaults.editRange.replace then
-      range = self._completion_list.itemDefaults.editRange.replace
+    if range then
+      self._cache[cache_key] = self:_convert_range_encoding(range)
+    else
+      self._cache[cache_key] = self:_create_expanded_range(self._provider:get_default_replace_range(), self:get_insert_range())
     end
   end
-  if not range then
-    range = self:_max_range(self._provider:get_default_replace_range(), self:get_insert_range())
-  end
-  return self:_convert_range_encoding(range)
+  return self._cache[cache_key]
 end
 
 ---Convert range encoding to LSP.PositionEncodingKind.UTF8.
@@ -310,13 +315,18 @@ function CompletionItem:_convert_range_encoding(range)
   if from_encoding == LSP.PositionEncodingKind.UTF8 then
     return range
   end
+
+  local start_cache_key = string.format('%s:%s:%s', 'CompletionItem:_convert_range_encoding:start', range.start.character, from_encoding)
+  if not self._trigger_context.cache[start_cache_key] then
+    self._trigger_context.cache[start_cache_key] = Position.to_utf8(self._trigger_context.text, range.start, from_encoding)
+  end
+  local end_cache_key = string.format('%s:%s:%s', 'CompletionItem:_convert_range_encoding:end', range['end'].character, from_encoding)
+  if not self._trigger_context.cache[end_cache_key] then
+    self._trigger_context.cache[end_cache_key] = Position.to_utf8(self._trigger_context.text, range['end'], from_encoding)
+  end
   return {
-    start = self._trigger_context.cache:ensure('CompletionItem:_convert_range_encoding:start:' .. range.start.character .. ':' .. from_encoding, function()
-      return Position.to_utf8(self._trigger_context.text, range.start, from_encoding)
-    end),
-    ['end'] = self._trigger_context.cache:ensure('CompletionItem:_convert_range_encoding:end:' .. range['end'].character .. ':' .. from_encoding, function()
-      return Position.to_utf8(self._trigger_context.text, range['end'], from_encoding)
-    end),
+    start = self._trigger_context.cache[start_cache_key],
+    ['end'] = self._trigger_context.cache[end_cache_key],
   }
 end
 
@@ -324,7 +334,7 @@ end
 ---@param range_ complete.kit.LSP.Range
 ---@param ... complete.kit.LSP.Range
 ---@return complete.kit.LSP.Range
-function CompletionItem:_max_range(range_, ...)
+function CompletionItem:_create_expanded_range(range_, ...)
   local max --[[@as complete.kit.LSP.Range]]
   for _, range in ipairs({ range_, ... }) do
     if range then

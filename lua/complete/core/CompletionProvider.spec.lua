@@ -14,8 +14,8 @@ local function create_provider(option)
 
   local response ---@type complete.kit.LSP.CompletionList
   local provider = CompletionProvider.new({
-    configure = function(_, configure)
-      configure({
+    initialize = function(_, params)
+      params.configure({
         keyword_pattern = option.keyword_pattern or [[\%(-\?\d\+\%(\.\d\+\)\?\|\h\w*\%(-\w*\)*\)]],
         completion_options = {
           triggerCharacters = { '.' }

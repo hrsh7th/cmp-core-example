@@ -28,7 +28,7 @@ function Position.cursor(encoding)
 end
 
 ---Convert position to buffer position from specified encoding.
----@param bufnr number
+---@param bufnr integer
 ---@param position complete.kit.LSP.Position
 ---@param from_encoding? complete.kit.LSP.PositionEncodingKind
 function Position.to_buf(bufnr, position, from_encoding)

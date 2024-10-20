@@ -24,7 +24,7 @@ function Range.contains(range)
 end
 
 ---Convert range to buffer range from specified encoding.
----@param bufnr number
+---@param bufnr integer
 ---@param range complete.kit.LSP.Range
 ---@param from_encoding? complete.kit.LSP.PositionEncodingKind
 ---@return complete.kit.LSP.Range
