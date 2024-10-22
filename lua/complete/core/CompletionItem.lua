@@ -26,14 +26,14 @@ CompletionItem.__index = CompletionItem
 ---@param list complete.kit.LSP.CompletionList
 ---@param item complete.kit.LSP.CompletionItem
 function CompletionItem.new(trigger_context, provider, list, item)
-  local self = setmetatable({}, CompletionItem)
-  self._trigger_context = trigger_context
-  self._provider = provider
-  self._completion_list = list
-  self._item = item
-  self._cache = {}
-  self._resolving = nil
-  return self
+  return setmetatable({
+    _trigger_context = trigger_context,
+    _provider = provider,
+    _completion_list = list,
+    _item = item,
+    _cache = {},
+    _resolving = nil,
+  }, CompletionItem)
 end
 
 ---Get suggest offset position 1-origin utf-8 byte index.
@@ -68,7 +68,9 @@ function CompletionItem:get_select_text()
   if not self._cache[cache_key] then
     local text = self:get_insert_text()
     if self:get_insert_text_format() == LSP.InsertTextFormat.Snippet then
-      text = tostring(SnippetText.parse(text)) --[[@as string]]
+      if text:find('${', 1, true) then
+        text = tostring(SnippetText.parse(text)) --[[@as string]]
+      end
     end
     self._cache[cache_key] = SelectText.create(text)
   end
@@ -252,7 +254,7 @@ function CompletionItem:has_text_edit()
 end
 
 ---Return insert range.
----NOTE: The line property can't be used. This is usually 0.
+---NOTE: This method ignores the `position.line` because CompletionItem does not consider line posision.
 ---NOTE: This range is utf-8 byte length based.
 ---@return complete.kit.LSP.Range
 function CompletionItem:get_insert_range()
@@ -282,7 +284,7 @@ function CompletionItem:get_insert_range()
 end
 
 ---Return replace range.
----NOTE: The line property can't be used. This is usually 0.
+---NOTE: This method ignores the `position.line` because CompletionItem does not consider line posision.
 ---NOTE: This range is utf-8 byte length based.
 ---@return complete.kit.LSP.Range
 function CompletionItem:get_replace_range()
@@ -308,6 +310,8 @@ function CompletionItem:get_replace_range()
 end
 
 ---Convert range encoding to LSP.PositionEncodingKind.UTF8.
+---NOTE: This method ignores the `position.line` because CompletionItem does not consider line posision.
+---NOTE: This range is utf-8 byte length based.
 ---@param range complete.kit.LSP.Range
 ---@return complete.kit.LSP.Range
 function CompletionItem:_convert_range_encoding(range)
@@ -316,18 +320,22 @@ function CompletionItem:_convert_range_encoding(range)
     return range
   end
 
-  local start_cache_key = string.format('%s:%s:%s', 'CompletionItem:_convert_range_encoding:start', range.start.character, from_encoding)
-  if not self._trigger_context.cache[start_cache_key] then
-    self._trigger_context.cache[start_cache_key] = Position.to_utf8(self._trigger_context.text, range.start, from_encoding)
+  local cache_key = string.format('%s:%s', 'CompletionItem:_convert_range_encoding', range.start.character, range['end'].character, from_encoding)
+  if not self._trigger_context.cache[cache_key] then
+    local start_cache_key = string.format('%s:%s:%s', 'CompletionItem:_convert_range_encoding:start', range.start.character, from_encoding)
+    if not self._trigger_context.cache[start_cache_key] then
+      self._trigger_context.cache[start_cache_key] = Position.to_utf8(self._trigger_context.text, range.start, from_encoding)
+    end
+    local end_cache_key = string.format('%s:%s:%s', 'CompletionItem:_convert_range_encoding:end', range['end'].character, from_encoding)
+    if not self._trigger_context.cache[end_cache_key] then
+      self._trigger_context.cache[end_cache_key] = Position.to_utf8(self._trigger_context.text, range['end'], from_encoding)
+    end
+    self._trigger_context.cache[cache_key] = {
+      start = self._trigger_context.cache[start_cache_key],
+      ['end'] = self._trigger_context.cache[end_cache_key],
+    }
   end
-  local end_cache_key = string.format('%s:%s:%s', 'CompletionItem:_convert_range_encoding:end', range['end'].character, from_encoding)
-  if not self._trigger_context.cache[end_cache_key] then
-    self._trigger_context.cache[end_cache_key] = Position.to_utf8(self._trigger_context.text, range['end'], from_encoding)
-  end
-  return {
-    start = self._trigger_context.cache[start_cache_key],
-    ['end'] = self._trigger_context.cache[end_cache_key],
-  }
+  return self._trigger_context.cache[cache_key]
 end
 
 ---Get expanded range.

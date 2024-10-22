@@ -1,7 +1,8 @@
 ---@diagnostic disable: invisible
-local spec = require('complete.misc.spec')
-local Keymap = require('complete.kit.Vim.Keymap')
-local LinePatch = require('complete.core.LinePatch')
+local spec           = require('complete.misc.spec')
+local Keymap         = require('complete.kit.Vim.Keymap')
+local LinePatch      = require('complete.core.LinePatch')
+local DefaultMatcher = require('complete.core.DefaultMatcher')
 
 describe('complete.core', function()
   describe('LinePatch', function()
@@ -14,18 +15,18 @@ describe('complete.core', function()
               buffer_text = {
                 '(ins|ert)',
               },
-              item = {
-                label = 'concat',
-              },
+              items = { {
+                label = 'inserted',
+              } },
             })
             local bufnr = vim.api.nvim_get_current_buf()
-            local item = provider:get_items()[1]
-            local range = item:get_insert_range()
+            local match = provider:get_matches(trigger_context, DefaultMatcher.matcher)[1]
+            local range = match.item:get_insert_range()
             local before = trigger_context.character - range.start.character
             local after = range['end'].character - trigger_context.character
-            LinePatch[fn](bufnr, before, after, item:get_insert_text()):await()
-            assert.equals(vim.api.nvim_get_current_line(), '(concatert)')
-            assert.are.same(vim.api.nvim_win_get_cursor(0), { 1, 7 })
+            LinePatch[fn](bufnr, before, after, match.item:get_insert_text()):await()
+            assert.equals(vim.api.nvim_get_current_line(), '(insertedert)')
+            assert.are.same(vim.api.nvim_win_get_cursor(0), { 1, 9 })
           end)
         end)
 
@@ -36,18 +37,18 @@ describe('complete.core', function()
               buffer_text = {
                 '(ins|ert)',
               },
-              item = {
-                label = 'concat',
-              },
+              items = { {
+                label = 'inserted',
+              } },
             })
             local bufnr = vim.api.nvim_get_current_buf()
-            local item = provider:get_items()[1]
-            local range = (item:get_replace_range() or item._provider:get_default_replace_range())
+            local match = provider:get_matches(trigger_context, DefaultMatcher.matcher)[1]
+            local range = (match.item:get_replace_range() or match.item._provider:get_default_replace_range())
             local before = trigger_context.character - range.start.character
             local after = range['end'].character - trigger_context.character
-            LinePatch[fn](bufnr, before, after, item:get_insert_text()):await()
-            assert.equals(vim.api.nvim_get_current_line(), '(concat)')
-            assert.are.same(vim.api.nvim_win_get_cursor(0), { 1, 7 })
+            LinePatch[fn](bufnr, before, after, match.item:get_insert_text()):await()
+            assert.equals(vim.api.nvim_get_current_line(), '(inserted)')
+            assert.are.same(vim.api.nvim_win_get_cursor(0), { 1, 9 })
           end)
         end)
 
@@ -59,18 +60,18 @@ describe('complete.core', function()
               buffer_text = {
                 '(ins|ert)',
               },
-              item = {
-                label = 'concat',
-              },
+              items = { {
+                label = 'inserted',
+              } },
             })
             local bufnr = vim.api.nvim_get_current_buf()
-            local item = provider:get_items()[1]
-            local range = item:get_insert_range()
+            local match = provider:get_matches(trigger_context, DefaultMatcher.matcher)[1]
+            local range = match.item:get_insert_range()
             local before = trigger_context.character - range.start.character
             local after = range['end'].character - trigger_context.character
-            LinePatch[fn](bufnr, before, after, item:get_insert_text()):await()
-            assert.equals(vim.fn.getcmdline(), '(concatert)')
-            assert.are.same(vim.fn.getcmdpos(), 8)
+            LinePatch[fn](bufnr, before, after, match.item:get_insert_text()):await()
+            assert.equals(vim.fn.getcmdline(), '(insertedert)')
+            assert.are.same(vim.fn.getcmdpos(), 10)
           end)
         end)
 
@@ -82,18 +83,18 @@ describe('complete.core', function()
               buffer_text = {
                 '(ins|ert)',
               },
-              item = {
-                label = 'concat',
-              },
+              items = { {
+                label = 'inserted',
+              } },
             })
             local bufnr = vim.api.nvim_get_current_buf()
-            local item = provider:get_items()[1]
-            local range = (item:get_replace_range() or item._provider:get_default_replace_range())
+            local match = provider:get_matches(trigger_context, DefaultMatcher.matcher)[1]
+            local range = (match.item:get_replace_range() or match.provider:get_default_replace_range())
             local before = trigger_context.character - range.start.character
             local after = range['end'].character - trigger_context.character
-            LinePatch[fn](bufnr, before, after, item:get_insert_text()):await()
-            assert.equals(vim.fn.getcmdline(), '(concat)')
-            assert.are.same(vim.fn.getcmdpos(), 8)
+            LinePatch[fn](bufnr, before, after, match.item:get_insert_text()):await()
+            assert.equals(vim.fn.getcmdline(), '(inserted)')
+            assert.are.same(vim.fn.getcmdpos(), 10)
           end)
         end)
       end)

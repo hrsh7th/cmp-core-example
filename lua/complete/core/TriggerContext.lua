@@ -1,4 +1,4 @@
-local RegExp = require('complete.kit.Vim.RegExp')
+local RegExp           = require('complete.kit.Vim.RegExp')
 
 ---The TriggerContext.
 ---@class complete.core.TriggerContext
@@ -11,7 +11,7 @@ local RegExp = require('complete.kit.Vim.RegExp')
 ---@field public force? boolean
 ---@field public trigger_character? string
 ---@field public cache table<string, any>
-local TriggerContext = {}
+local TriggerContext   = {}
 TriggerContext.__index = TriggerContext
 
 ---Create new TriggerContext from current state.
@@ -36,17 +36,59 @@ end
 ---@param reason? { force?: boolean, trigger_character?: string }
 ---@return complete.core.TriggerContext
 function TriggerContext.new(mode, line, character, text, bufnr, reason)
-  local self = setmetatable({}, TriggerContext)
-  self.mode = mode
-  self.line = line
-  self.character = character
-  self.text = text
-  self.bufnr = bufnr
-  self.time = vim.loop.now()
-  self.force = not not (reason and reason.force)
-  self.trigger_character = reason and reason.trigger_character
-  self.cache = {}
-  return self
+  return setmetatable({
+    mode = mode,
+    line = line,
+    character = character,
+    text = text,
+    bufnr = bufnr,
+    time = vim.loop.now(),
+    force = not not (reason and reason.force),
+    trigger_character = reason and reason.trigger_character,
+    cache = {},
+  }, TriggerContext)
+end
+
+---Get query text.
+---@param offset integer
+---@return string
+function TriggerContext:get_input(offset)
+  local cache_key = string.format('%s:%s', 'get_input', offset)
+  if not self.cache[cache_key] then
+    self.cache[cache_key] = self.text:sub(offset, self.character)
+  end
+  return self.cache[cache_key]
+end
+
+---Check if trigger context is changed.
+---@param new_trigger_context complete.core.TriggerContext
+---@return boolean
+function TriggerContext:changed(new_trigger_context)
+  if new_trigger_context.force then
+    return true
+  end
+
+  if self.mode ~= new_trigger_context.mode then
+    return true
+  end
+
+  if self.line ~= new_trigger_context.line then
+    return true
+  end
+
+  if self.character ~= new_trigger_context.character then
+    return true
+  end
+
+  if self.text ~= new_trigger_context.text then
+    return true
+  end
+
+  if self.bufnr ~= new_trigger_context.bufnr then
+    return true
+  end
+
+  return false
 end
 
 ---Get keyword offset.

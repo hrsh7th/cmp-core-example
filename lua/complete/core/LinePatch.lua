@@ -42,7 +42,13 @@ local LinePatch = {}
 ---@param insert_text string
 function LinePatch.apply_by_func(bufnr, before, after, insert_text)
   local mode = vim.api.nvim_get_mode().mode --[[@as string]]
-  if mode == 'i' then
+  if mode == 'c' then
+    local cursor_col = vim.fn.getcmdpos() - 1
+    local cmdline = vim.fn.getcmdline()
+    local before_text = string.sub(cmdline, 1, cursor_col - before)
+    local after_text = string.sub(cmdline, cursor_col + after + 1)
+    vim.fn.setcmdline(before_text .. insert_text .. after_text, #before_text + #insert_text + 1)
+  else
     local text_edit = {
       range = {
         start = shift_position(bufnr, Position.cursor(LSP.PositionEncodingKind.UTF8), -before),
@@ -64,12 +70,6 @@ function LinePatch.apply_by_func(bufnr, before, after, insert_text)
         #insert_lines[#insert_lines],
       })
     end
-  elseif mode == 'c' then
-    local cursor_col = vim.fn.getcmdpos() - 1
-    local cmdline = vim.fn.getcmdline()
-    local before_text = string.sub(cmdline, 1, cursor_col - before)
-    local after_text = string.sub(cmdline, cursor_col + after + 1)
-    vim.fn.setcmdline(before_text .. insert_text .. after_text, #before_text + #insert_text + 1)
   end
   return Async.resolve()
 end

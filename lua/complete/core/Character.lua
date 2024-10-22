@@ -77,13 +77,51 @@ end
 
 ---@param a integer
 ---@param b integer
-function Character.match(a, b)
+function Character.match_ignorecase(a, b)
   if a == b then
     return true
   elseif Character.is_alpha(a) and Character.is_alpha(b) then
     return (a == b + 32) or (a == b - 32)
   end
   return false
+end
+
+---@param text string
+---@param index integer
+---@return boolean
+function Character.is_semantic_index(text, index)
+  if index <= 1 then
+    return true
+  end
+
+  local prev = string.byte(text, index - 1)
+  local curr = string.byte(text, index)
+
+  if not Character.is_upper(prev) and Character.is_upper(curr) then
+    return true
+  end
+  if Character.is_symbol(curr) or Character.is_white(curr) then
+    return true
+  end
+  if not Character.is_alpha(prev) and Character.is_alpha(curr) then
+    return true
+  end
+  if not Character.is_digit(prev) and Character.is_digit(curr) then
+    return true
+  end
+  return false
+end
+
+---@param text string
+---@param current_index integer
+---@return integer
+function Character.get_next_semantic_index(text, current_index)
+  for i = current_index + 1, #text do
+    if Character.is_semantic_index(text, i) then
+      return i
+    end
+  end
+  return #text + 1
 end
 
 return Character

@@ -16,6 +16,21 @@ function kit.gc(callback)
   return gc
 end
 
+---Clear list
+---@generic T
+---@param tbl T[]
+---@return T[]
+function kit.clear(tbl)
+  if not tbl then
+    return {}
+  end
+
+  for k in pairs(tbl) do
+    tbl[k] = nil
+  end
+  return tbl
+end
+
 do
   local mpack = require('mpack')
 

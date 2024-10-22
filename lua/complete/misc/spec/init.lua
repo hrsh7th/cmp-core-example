@@ -5,17 +5,9 @@ local Async = require('complete.kit.Async')
 local assert = require('luassert')
 local LinePatch = require('complete.core.LinePatch')
 
-local spec = {}
+local profiling = {}
 
----@class complete.core.spec.setup.Option
----@field public buffer_text string[]
----@field public mode? 'i' | 'c'
----@field public input? string
----@field public keyword_pattern? string
----@field public position_encoding_kind? complete.kit.LSP.PositionEncodingKind
----@field public resolve? fun(item: complete.kit.LSP.CompletionItem): complete.kit.Async.AsyncTask complete.kit.LSP.CompletionItem
----@field public item_defaults? complete.kit.LSP.CompletionList.itemDefaults
----@field public item? complete.kit.LSP.CompletionItem
+local spec = {}
 
 ---Reset test environment.
 function spec.reset()
@@ -25,6 +17,18 @@ function spec.reset()
   vim.o.swapfile = false
 end
 
+---@class complete.core.spec.setup.Option
+---@field public buffer_text string[]
+---@field public mode? 'i' | 'c'
+---@field public input? string
+---@field public keyword_pattern? string
+---@field public position_encoding_kind? complete.kit.LSP.PositionEncodingKind
+---@field public resolve? fun(item: complete.kit.LSP.CompletionItem): complete.kit.Async.AsyncTask complete.kit.LSP.CompletionItem
+---@field public item_defaults? complete.kit.LSP.CompletionList.itemDefaults
+---@field public is_incomplete? boolean
+---@field public items? complete.kit.LSP.CompletionItem[]
+
+---Setup for spec.
 ---@param option complete.core.spec.setup.Option
 ---@return complete.core.TriggerContext, complete.core.CompletionProvider
 function spec.setup(option)
@@ -50,7 +54,7 @@ function spec.setup(option)
     vim.fn.setcmdline(text, pos)
   end
 
-  local target_item = option.item or { label = 'dummy' }
+  local target_items = option.items or { { label = 'dummy' } }
 
   -- Create completion provider with specified item.
   local provider = CompletionProvider.new({
@@ -73,9 +77,9 @@ function spec.setup(option)
     end,
     complete = function(_)
       return Async.resolve({
-        items = { target_item },
+        items = target_items,
         itemDefaults = option.item_defaults,
-        isIncomplete = false,
+        isIncomplete = option.is_incomplete or false,
       })
     end,
   })
@@ -130,6 +134,24 @@ function spec.assert(buffer_text)
     end
     error(err, 2)
   end
+end
+
+function spec.start_profile()
+  profiling = {}
+end
+
+function spec.on_call(name)
+  if not profiling then
+    return
+  end
+  if not profiling[name] then
+    profiling[name] = 0
+  end
+  profiling[name] = profiling[name] + 1
+end
+
+function spec.print_profile()
+  vim.print(vim.inspect(profiling))
 end
 
 return spec
