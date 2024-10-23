@@ -16,11 +16,9 @@ local ReadyState = {
 ---@field public ready_state? complete.core.CompletionProvider.ReadyState
 ---@field public is_incomplete? boolean
 ---@field public items? complete.core.CompletionItem[]
+---@field public matched_items? complete.core.CompletionItem[]
 ---@field public matched_cursor_offset? integer
 ---@field public matched_keyword_offset? integer
----@field public matched_items? complete.core.CompletionItem[]
----@field public matches? complete.core.Match[]
----@field public item_match_slots? table<complete.core.CompletionItem, complete.core.Match>
 
 ---Convert completion response to LSP.CompletionList.
 ---@param response (complete.kit.LSP.CompletionList|complete.kit.LSP.CompletionItem[])?
@@ -123,27 +121,29 @@ function CompletionProvider:complete(trigger_context)
       -- keyword based completion.
       local keyword_pattern = self:get_keyword_pattern()
       local next_keyword_offset = trigger_context:get_keyword_offset(keyword_pattern)
-      local prev_keyword_offset = self._trigger_context and self._trigger_context:get_keyword_offset(keyword_pattern)
-      local is_incomplete = self._state and self._state.is_incomplete
+      if next_keyword_offset then
+        local prev_keyword_offset = self._trigger_context and self._trigger_context:get_keyword_offset(keyword_pattern)
+        local is_incomplete = self._state and self._state.is_incomplete
 
-      if is_incomplete and next_keyword_offset == prev_keyword_offset then
-        -- invoke completion if previous response specifies the `isIncomplete=true` and offset is not changed.
-        completion_context = {
-          triggerKind = LSP.CompletionTriggerKind.TriggerForIncompleteCompletions,
-        }
-        completion_offset = next_keyword_offset
-      elseif next_keyword_offset and next_keyword_offset ~= prev_keyword_offset then
-        -- invoke completion if matched the new keyword or keyword offset is changed.
-        completion_context = {
-          triggerKind = LSP.CompletionTriggerKind.Invoked,
-        }
-        completion_offset = next_keyword_offset
+        if is_incomplete and next_keyword_offset == prev_keyword_offset then
+          -- invoke completion if previous response specifies the `isIncomplete=true` and offset is not changed.
+          completion_context = {
+            triggerKind = LSP.CompletionTriggerKind.TriggerForIncompleteCompletions,
+          }
+          completion_offset = next_keyword_offset
+        elseif next_keyword_offset and next_keyword_offset ~= prev_keyword_offset then
+          -- invoke completion if keyword_offset is changed.
+          completion_context = {
+            triggerKind = LSP.CompletionTriggerKind.Invoked,
+          }
+          completion_offset = next_keyword_offset
+        end
       end
     end
 
     -- do not invoke new completion.
     if not completion_context then
-      -- NOTE: drop previous completion response if completion_offset was changed.
+      -- drop previous completion response if completion_offset was changed.
       if self._completion_offset ~= completion_offset then
         self._state = { ready_state = ReadyState.Waiiting }
       end
@@ -160,15 +160,15 @@ function CompletionProvider:complete(trigger_context)
     end
     self._state.ready_state = ReadyState.Fetching
 
-    -- Invoke completion.
+    -- invoke completion.
     local response = self._source:complete(completion_context):await()
 
-    -- Ignore obsolete response.
+    -- ignore obsolete response.
     if self._trigger_context ~= trigger_context then
       return
     end
 
-    -- Adopt response.
+    -- adopt response.
     self:_adopt_response(trigger_context, to_completion_list(response))
 
     return completion_context
@@ -187,8 +187,6 @@ function CompletionProvider:_adopt_response(trigger_context, list)
   self._state.matched_cursor_offset = nil
   self._state.matched_keyword_offset = nil
   self._state.matched_items = kit.clear(self._state.matched_items)
-  self._state.matches = kit.clear(self._state.matches)
-  self._state.item_match_slots = kit.clear(self._state.item_match_slots)
 end
 
 ---Resolve completion item (completionItem/resolve).
@@ -241,44 +239,35 @@ end
 ---@param matcher complete.core.Matcher
 ---@return complete.core.Match[]
 function CompletionProvider:get_matches(trigger_context, matcher)
-  local target_items = self._state.items or {}
-
   local next_cursor_offset = trigger_context.character + 1
-  local next_keyword_offset = trigger_context:get_keyword_offset(self:get_keyword_pattern())
-  if self._trigger_context and self._state.matched_cursor_offset then
-    local prev_cursor_offset = self._state.matched_cursor_offset
-    local prev_keyword_offset = self._state.matched_keyword_offset
-    if prev_keyword_offset == next_keyword_offset and prev_cursor_offset <= next_cursor_offset then
-      target_items = self._state.matched_items or {}
-    end
-  end
-
+  local next_keyword_offset = trigger_context:get_keyword_offset(self:get_keyword_pattern()) or -1
+  local prev_cursor_offset = self._state.matched_cursor_offset or -2
+  local prev_keyword_offset = self._state.matched_keyword_offset or -2
   self._state.matched_cursor_offset = next_cursor_offset
   self._state.matched_keyword_offset = next_keyword_offset
-  self._state.matched_items = kit.clear(self._state.matched_items)
-  self._state.matches = kit.clear(self._state.matches)
-  self._state.item_match_slots = self._state.item_match_slots or {}
 
-  for _, item in ipairs(target_items) do
-    local score, match_positions = matcher(trigger_context:get_input(item:get_offset()), item:get_filter_text())
-    if score > 0 then
-      self._state.matched_items[#self._state.matched_items + 1] = item
-      if not self._state.item_match_slots[item] then
-        self._state.item_match_slots[item] = {
-          provider = self,
-          item = item,
-          score = score,
-          match_positions = match_positions,
-        }
-      else
-        self._state.item_match_slots[item].score = score
-        self._state.item_match_slots[item].match_positions = match_positions
-      end
-      self._state.matches[#self._state.matches + 1] = self._state.item_match_slots[item]
-    end
+  local target_items = self._state.items or {}
+
+  local is_continue_matcihng = prev_keyword_offset == next_keyword_offset and prev_cursor_offset <= next_cursor_offset
+  if is_continue_matcihng then
+    target_items = self._state.matched_items or {}
   end
 
-  return self._state.matches
+  self._state.matched_items = {}
+  local matches = {} --[=[@as complete.core.Match[]]=]
+  for _, item in ipairs(target_items) do
+    local score, match_positions = matcher(trigger_context:get_query(item:get_offset()), item:get_filter_text())
+    if score > 0 then
+      self._state.matched_items[#self._state.matched_items + 1] = item
+      matches[#matches + 1] = {
+        provider = self,
+        item = item,
+        score = score,
+        match_positions = match_positions,
+      }
+    end
+  end
+  return matches
 end
 
 ---Return keyword offest position.

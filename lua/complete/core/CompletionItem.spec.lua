@@ -18,13 +18,6 @@ local function range(sl, sc, el, ec)
   }
 end
 
----@param trigger_context complete.core.TriggerContext
----@param item complete.core.CompletionItem
----@return string
-local function get_input(trigger_context, item)
-  return vim.api.nvim_get_current_line():sub(item:get_offset(), trigger_context.character)
-end
-
 describe('complete.core', function()
   describe('CompletionItem', function()
     describe('#commit', function()
@@ -44,7 +37,7 @@ describe('complete.core', function()
           })
           local match = provider:get_matches(trigger_context, DefaultMatcher.matcher)[1]
           assert.equals(match.item:get_offset(), #'obj' + 1)
-          assert.equals(get_input(trigger_context, match.item), '.p')
+          assert.equals(trigger_context:get_query(match.item:get_offset()), '.p')
           assert.equals(match.item:get_filter_text(), '.prop')
           assert.equals(match.item:get_select_text(), '->prop')
           match.item:commit({ replace = true }):await()
@@ -69,7 +62,7 @@ describe('complete.core', function()
           })
           local match = provider:get_matches(trigger_context, DefaultMatcher.matcher)[1]
           assert.equals(match.item:get_offset(), #'[]' + 1)
-          assert.equals(get_input(trigger_context, match.item), '.S')
+          assert.equals(trigger_context:get_query(match.item:get_offset()), '.S')
           assert.equals(match.item:get_filter_text(), '.Symbol')
           assert.equals(match.item:get_select_text(), '[Symbol]')
           match.item:commit({ replace = true }):await()
@@ -97,7 +90,7 @@ describe('complete.core', function()
           })
           local match = provider:get_matches(trigger_context, DefaultMatcher.matcher)[1]
           assert.equals(match.item:get_offset(), #'  ' + 1)
-          assert.equals(get_input(trigger_context, match.item), '</d')
+          assert.equals(trigger_context:get_query(match.item:get_offset()), '</d')
           assert.equals(match.item:get_select_text(), '</div')
           assert.equals(match.item:get_filter_text(), '</div')
           match.item:commit({ replace = true }):await()
@@ -143,7 +136,7 @@ describe('complete.core', function()
           })
           local match = provider:get_matches(trigger_context, DefaultMatcher.matcher)[1]
           assert.equals(match.item:get_offset(), #'    .' + 1)
-          assert.equals(get_input(trigger_context, match.item), 'd')
+          assert.equals(trigger_context:get_query(match.item:get_offset()), 'd')
           assert.equals(match.item:get_select_text(), 'dbg!')
           assert.equals(match.item:get_filter_text(), 'dbg')
           match.item:commit({ replace = true }):await()

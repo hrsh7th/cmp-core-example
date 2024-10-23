@@ -52,8 +52,8 @@ end
 ---Get query text.
 ---@param offset integer
 ---@return string
-function TriggerContext:get_input(offset)
-  local cache_key = string.format('%s:%s', 'get_input', offset)
+function TriggerContext:get_query(offset)
+  local cache_key = string.format('%s:%s', 'get_query', offset)
   if not self.cache[cache_key] then
     self.cache[cache_key] = self.text:sub(offset, self.character)
   end

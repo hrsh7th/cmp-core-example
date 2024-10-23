@@ -40,24 +40,28 @@ end
 ---NOTE: VSCode always shows the completion menu relative to the cursor position. This is vim specific implementation.
 ---@return number
 function CompletionItem:get_offset()
-  local keyword_offset = self._provider:get_keyword_offset()
-  if not self:has_text_edit() then
-    return keyword_offset
-  end
-
-  local insert_range = self:get_insert_range()
-  local cache_key = string.format('%s:%s:%s', 'get_offset', keyword_offset, insert_range.start.character)
-  if not self._trigger_context.cache[cache_key] then
-    local offset = insert_range.start.character + 1
-    for i = offset, keyword_offset do
-      offset = i
-      if not Character.is_white(self._trigger_context.text:byte(i)) then
-        break
+  local cache_key = 'get_offset'
+  if not self._cache[cache_key] then
+    local keyword_offset = self._provider:get_keyword_offset()
+    if not self:has_text_edit() then
+      self._cache[cache_key] = keyword_offset
+    else
+      local insert_range = self:get_insert_range()
+      local trigger_context_cache_key = string.format('%s:%s:%s', 'get_offset', keyword_offset, insert_range.start.character)
+      if not self._trigger_context.cache[trigger_context_cache_key] then
+        local offset = insert_range.start.character + 1
+        for i = offset, keyword_offset do
+          offset = i
+          if not Character.is_white(self._trigger_context.text:byte(i)) then
+            break
+          end
+        end
+        self._trigger_context.cache[trigger_context_cache_key] = math.min(offset, keyword_offset)
       end
+      self._cache[cache_key] = self._trigger_context.cache[trigger_context_cache_key]
     end
-    self._trigger_context.cache[cache_key] = math.min(offset, keyword_offset)
   end
-  return self._trigger_context.cache[cache_key]
+  return self._cache[cache_key]
 end
 
 ---Return select text that will be inserted if the item is selected.
@@ -347,7 +351,7 @@ function CompletionItem:_create_expanded_range(range_, ...)
   for _, range in ipairs({ range_, ... }) do
     if range then
       if not max then
-        max = range
+        max = kit.clone(range)
       else
         if range.start.character < max.start.character then
           max.start.character = range.start.character
