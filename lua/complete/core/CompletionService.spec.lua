@@ -1,4 +1,4 @@
-local spec = require('complete.misc.spec')
+local spec = require('complete.spec')
 local CompletionService = require('complete.core.CompletionService')
 local DefaultSorter = require('complete.ext.DefaultSorter')
 local DefaultMatcher = require('complete.ext.DefaultMatcher')

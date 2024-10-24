@@ -1,6 +1,6 @@
-local tailwindcss_fixture = require('complete.misc.spec.fixtures.tailwindcss')
+local tailwindcss_fixture = require('complete.spec.fixtures.tailwindcss')
 
-local spec = require('complete.misc.spec')
+local spec = require('complete.spec')
 local CompletionService = require('complete.core.CompletionService')
 local TriggerContext = require('complete.core.TriggerContext')
 local DefaultSorter = require('complete.ext.DefaultSorter')

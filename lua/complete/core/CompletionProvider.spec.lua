@@ -1,4 +1,4 @@
-local spec = require('complete.misc.spec')
+local spec = require('complete.spec')
 local Async = require('complete.kit.Async')
 local Keymap = require('complete.kit.Vim.Keymap')
 local TriggerContext = require('complete.core.TriggerContext')

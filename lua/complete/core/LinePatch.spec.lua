@@ -1,5 +1,5 @@
 ---@diagnostic disable: invisible
-local spec           = require('complete.misc.spec')
+local spec           = require('complete.spec')
 local Keymap         = require('complete.kit.Vim.Keymap')
 local LinePatch      = require('complete.core.LinePatch')
 local DefaultMatcher = require('complete.ext.DefaultMatcher')
