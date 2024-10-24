@@ -2,7 +2,7 @@ local spec           = require('complete.misc.spec')
 local LSP            = require('complete.kit.LSP')
 local Async          = require('complete.kit.Async')
 local Keymap         = require('complete.kit.Vim.Keymap')
-local DefaultMatcher = require('complete.core.DefaultMatcher')
+local DefaultMatcher = require('complete.ext.DefaultMatcher')
 
 ---@return complete.kit.LSP.Range
 local function range(sl, sc, el, ec)

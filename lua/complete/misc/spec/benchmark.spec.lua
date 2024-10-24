@@ -3,6 +3,8 @@ local tailwindcss_fixture = require('complete.misc.spec.fixtures.tailwindcss')
 local spec = require('complete.misc.spec')
 local CompletionService = require('complete.core.CompletionService')
 local TriggerContext = require('complete.core.TriggerContext')
+local DefaultSorter = require('complete.ext.DefaultSorter')
+local DefaultMatcher = require('complete.ext.DefaultMatcher')
 
 local function run(name, fn)
   collectgarbage('collect')
@@ -28,6 +30,8 @@ describe('complete.misc.spec.benchmark', function()
         items = tailwindcss_fixture.items,
       })
       local service = CompletionService.new({
+        sorter = DefaultSorter.sorter,
+        matcher = DefaultMatcher.matcher,
         provider_groups = {
           {
             {

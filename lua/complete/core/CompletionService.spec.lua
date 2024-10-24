@@ -1,5 +1,7 @@
 local spec = require('complete.misc.spec')
 local CompletionService = require('complete.core.CompletionService')
+local DefaultSorter = require('complete.ext.DefaultSorter')
+local DefaultMatcher = require('complete.ext.DefaultMatcher')
 
 describe('complete.core', function()
   describe('CompletionService', function()
@@ -17,6 +19,8 @@ describe('complete.core', function()
       local state = {}
       do
         local service = CompletionService.new({
+          sorter = DefaultSorter.sorter,
+          matcher = DefaultMatcher.matcher,
           provider_groups = {
             {
               {

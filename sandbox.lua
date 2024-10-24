@@ -2,6 +2,8 @@ local Async = require('complete.kit.Async')
 local Client = require('complete.kit.LSP.Client')
 local CompletionService = require('complete.core.CompletionService')
 local CompletionProvider = require('complete.core.CompletionProvider')
+local DefaultMatcher = require('complete.ext.DefaultMatcher')
+local DefaultSorter = require('complete.ext.DefaultSorter')
 local DefaultView = require('complete.ext.DefaultView')
 
 local bufnr = vim.api.nvim_get_current_buf()
@@ -33,6 +35,8 @@ local providers = vim.iter(vim.lsp.get_clients({ bufnr = bufnr }))
     :totable()
 
 local service = CompletionService.new({
+  sorter = DefaultSorter.sorter,
+  matcher = DefaultMatcher.matcher,
   provider_groups = {
     vim.iter(providers):map(function(source)
       return {

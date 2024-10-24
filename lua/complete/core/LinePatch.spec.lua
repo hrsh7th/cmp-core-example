@@ -2,7 +2,7 @@
 local spec           = require('complete.misc.spec')
 local Keymap         = require('complete.kit.Vim.Keymap')
 local LinePatch      = require('complete.core.LinePatch')
-local DefaultMatcher = require('complete.core.DefaultMatcher')
+local DefaultMatcher = require('complete.ext.DefaultMatcher')
 
 describe('complete.core', function()
   describe('LinePatch', function()

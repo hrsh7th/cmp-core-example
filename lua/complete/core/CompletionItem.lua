@@ -70,6 +70,12 @@ function CompletionItem:get_label()
   return self._item.label
 end
 
+---Return sort_text.
+---@return string
+function CompletionItem:get_sort_text()
+  return self._item.sortText or self._item.label
+end
+
 ---Return select text that will be inserted if the item is selected.
 ---NOTE: VSCode doesn't have the text inserted when item was selected. This is vim specific implementation.
 ---@reutrn string

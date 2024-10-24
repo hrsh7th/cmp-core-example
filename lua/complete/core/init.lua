@@ -7,4 +7,5 @@
 ---@field match_positions complete.core.MatchPosition[]
 
 ---@alias complete.core.Matcher fun(query: string, input: string): integer, complete.core.MatchPosition[]
+---@alias complete.core.Sorter fun(matches: complete.core.Match[]): complete.core.Match[]
 

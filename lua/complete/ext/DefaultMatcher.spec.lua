@@ -1,6 +1,6 @@
-local DefaultMatcher = require('complete.core.DefaultMatcher')
+local DefaultMatcher = require('complete.ext.DefaultMatcher')
 
-describe('complete.core', function()
+describe('complete.ext', function()
   describe('DefaultMatcher', function()
     describe('.matcher', function()
       it('should return corerct indexes', function()

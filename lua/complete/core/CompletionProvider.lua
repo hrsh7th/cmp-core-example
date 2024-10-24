@@ -12,18 +12,6 @@ local ReadyState = {
   Completed = 'Completed',
 }
 
----@class complete.core.CompletionProvider.State
----@field public ready_state? complete.core.CompletionProvider.ReadyState
----@field public completion_offset? integer
----@field public trigger_context? complete.core.TriggerContext
----@field public is_incomplete? boolean
----@field public items? complete.core.CompletionItem[]
----@field public matches? complete.core.Match[]
----@field public matched_text? string
----@field public matched_items? complete.core.CompletionItem[]
----@field public matched_cursor_offset? integer
----@field public matched_keyword_offset? integer
-
 ---Convert completion response to LSP.CompletionList.
 ---@param response (complete.kit.LSP.CompletionList|complete.kit.LSP.CompletionItem[])?
 ---@return complete.kit.LSP.CompletionList
@@ -53,12 +41,23 @@ local function extract_keyword_range(trigger_context, keyword_pattern)
   return trigger_context.cache[cache_key]
 end
 
+---@class complete.core.CompletionProvider.State
+---@field public ready_state? complete.core.CompletionProvider.ReadyState
+---@field public completion_context? complete.kit.LSP.CompletionContext
+---@field public completion_offset? integer
+---@field public trigger_context? complete.core.TriggerContext
+---@field public is_incomplete? boolean
+---@field public items? complete.core.CompletionItem[]
+---@field public matches? complete.core.Match[]
+---@field public matched_text? string
+---@field public matched_items? complete.core.CompletionItem[]
+---@field public matched_cursor_offset? integer
+---@field public matched_keyword_offset? integer
+
 ---@class complete.core.CompletionProvider
 ---@field private _source complete.core.CompletionSource
 ---@field private _config complete.core.CompletionSource.Configuration
 ---@field private _state complete.core.CompletionProvider.State
----@field private _trigger_context? complete.core.TriggerContext
----@field private _completion_offset? integer
 local CompletionProvider = {}
 CompletionProvider.__index = CompletionProvider
 CompletionProvider.ReadyState = ReadyState
@@ -127,7 +126,7 @@ function CompletionProvider:complete(trigger_context)
       local next_keyword_offset = trigger_context:get_keyword_offset(keyword_pattern)
       if next_keyword_offset and next_keyword_offset < trigger_context.character + 1 then
         local prev_keyword_offset = self._state.trigger_context and
-        self._state.trigger_context:get_keyword_offset(keyword_pattern)
+            self._state.trigger_context:get_keyword_offset(keyword_pattern)
         local is_incomplete = self._state and self._state.is_incomplete
 
         if is_incomplete and next_keyword_offset == prev_keyword_offset then
@@ -145,7 +144,10 @@ function CompletionProvider:complete(trigger_context)
         end
       else
         -- drop previous completion response if keyword based completion was selected and not available.
-        self:clear()
+        local is_not_trigger_character_completion = not self._state.completion_context or self._state.completion_context.triggerKind ~= LSP.CompletionTriggerKind.TriggerCharacter
+        if is_not_trigger_character_completion then
+          self:clear()
+        end
       end
     end
 
@@ -156,12 +158,13 @@ function CompletionProvider:complete(trigger_context)
 
     -- keep completion state for isIncomplete completion.
     local keep_completion = self._state.is_incomplete and
-    completion_context.triggerKind == LSP.CompletionTriggerKind.TriggerForIncompleteCompletions
+        completion_context.triggerKind == LSP.CompletionTriggerKind.TriggerForIncompleteCompletions
     if not keep_completion then
       self._state = { ready_state = ReadyState.Waiiting }
     end
     self._state.ready_state = ReadyState.Fetching
     self._state.trigger_context = trigger_context
+    self._state.completion_context = completion_context
     self._state.completion_offset = completion_offset
 
     -- invoke completion.
