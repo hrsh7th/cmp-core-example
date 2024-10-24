@@ -13,9 +13,11 @@ if ok then
   cmp.setup.buffer { completion = { autocomplete = false } }
 end
 
-local providers = vim.iter(vim.lsp.get_clients({ bufnr = bufnr }))
+---Create complete.core.CompletionSource from active clients.
+---@type complete.core.CompletionSource[]
+local sources = vim.iter(vim.lsp.get_clients({ bufnr = bufnr }))
     :filter(function(c)
-      return c.server_capabilities.completionProvider
+      return c.server_capabilities.completionProvider ~= nil
     end)
     :map(function(c)
       local client = Client.new(c)
@@ -26,26 +28,41 @@ local providers = vim.iter(vim.lsp.get_clients({ bufnr = bufnr }))
           })
         end,
         complete = function()
+          local position_params = vim.lsp.util.make_position_params()
           return Async.run(function()
-            return client:textDocument_completion(vim.lsp.util.make_position_params(0)):await()
+            return client:textDocument_completion({
+              textDocument = {
+                uri = position_params.textDocument.uri,
+              },
+              position = {
+                line = position_params.position.line,
+                character = position_params.position.character,
+              }
+            }):await()
           end)
         end
       }
     end)
     :totable()
 
+---Create complete.core.CompletionProvider from sources.
+---@type complete.core.CompletionProvider[]
+local providers = vim.iter(sources):map(function(source)
+  return CompletionProvider.new(source)
+end):totable()
+
+-- Create CompletionService.
 local service = CompletionService.new({
   sorter = DefaultSorter.sorter,
   matcher = DefaultMatcher.matcher,
   provider_groups = {
-    vim.iter(providers):map(function(source)
+    vim.iter(providers):map(function(provider)
       return {
-        provider = CompletionProvider.new(source)
+        provider = provider
       }
     end):totable()
   }
 })
 
-local view = DefaultView.new(service)
-
-view:attach(bufnr)
+-- Create DefaultView and attach buffer.
+DefaultView.new(service):attach(bufnr)

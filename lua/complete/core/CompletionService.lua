@@ -11,9 +11,9 @@ local CompletionProvider  = require('complete.core.CompletionProvider')
 ---@field item_count? integer
 
 ---@class complete.core.CompletionService.Option
----@field provider_groups complete.core.CompletionService.ProviderConfiguration[][]
----@field matcher complete.core.Matcher
 ---@field sorter complete.core.Sorter
+---@field matcher complete.core.Matcher
+---@field provider_groups complete.core.CompletionService.ProviderConfiguration[][]
 
 ---@class complete.core.CompletionService.State
 ---@field trigger_context complete.core.TriggerContext
