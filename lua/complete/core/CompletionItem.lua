@@ -64,6 +64,12 @@ function CompletionItem:get_offset()
   return self._cache[cache_key]
 end
 
+---Return label.
+---@return string
+function CompletionItem:get_label()
+  return self._item.label
+end
+
 ---Return select text that will be inserted if the item is selected.
 ---NOTE: VSCode doesn't have the text inserted when item was selected. This is vim specific implementation.
 ---@reutrn string
@@ -262,29 +268,25 @@ end
 ---NOTE: This range is utf-8 byte length based.
 ---@return complete.kit.LSP.Range
 function CompletionItem:get_insert_range()
-  local cache_key = 'get_insert_range'
-  if not self._cache[cache_key] then
-    local range --[[@as complete.kit.LSP.Range]]
-    if self._item.textEdit then
-      if self._item.textEdit.insert then
-        range = self._item.textEdit.insert
-      else
-        range = self._item.textEdit.range
-      end
-    elseif self._completion_list.itemDefaults and self._completion_list.itemDefaults.editRange then
-      if self._completion_list.itemDefaults.editRange.insert then
-        range = self._completion_list.itemDefaults.editRange.insert
-      else
-        range = self._completion_list.itemDefaults.editRange
-      end
-    end
-    if range then
-      self._cache[cache_key] = self:_convert_range_encoding(range)
+  local range --[[@as complete.kit.LSP.Range]]
+  if self._item.textEdit then
+    if self._item.textEdit.insert then
+      range = self._item.textEdit.insert
     else
-      self._cache[cache_key] = self._provider:get_default_insert_range()
+      range = self._item.textEdit.range
+    end
+  elseif self._completion_list.itemDefaults and self._completion_list.itemDefaults.editRange then
+    if self._completion_list.itemDefaults.editRange.insert then
+      range = self._completion_list.itemDefaults.editRange.insert
+    else
+      range = self._completion_list.itemDefaults.editRange
     end
   end
-  return self._cache[cache_key]
+  if range then
+    return self:_convert_range_encoding(range)
+  else
+    return self._provider:get_default_insert_range()
+  end
 end
 
 ---Return replace range.
@@ -292,25 +294,21 @@ end
 ---NOTE: This range is utf-8 byte length based.
 ---@return complete.kit.LSP.Range
 function CompletionItem:get_replace_range()
-  local cache_key = 'get_replace_range'
-  if not self._cache[cache_key] then
-    local range --[[@as complete.kit.LSP.Range]]
-    if self._item.textEdit then
-      if self._item.textEdit.replace then
-        range = self._item.textEdit.replace
-      end
-    elseif self._completion_list.itemDefaults and self._completion_list.itemDefaults.editRange then
-      if self._completion_list.itemDefaults.editRange.replace then
-        range = self._completion_list.itemDefaults.editRange.replace
-      end
+  local range --[[@as complete.kit.LSP.Range]]
+  if self._item.textEdit then
+    if self._item.textEdit.replace then
+      range = self._item.textEdit.replace
     end
-    if range then
-      self._cache[cache_key] = self:_convert_range_encoding(range)
-    else
-      self._cache[cache_key] = self:_create_expanded_range(self._provider:get_default_replace_range(), self:get_insert_range())
+  elseif self._completion_list.itemDefaults and self._completion_list.itemDefaults.editRange then
+    if self._completion_list.itemDefaults.editRange.replace then
+      range = self._completion_list.itemDefaults.editRange.replace
     end
   end
-  return self._cache[cache_key]
+  if range then
+    return self:_convert_range_encoding(range)
+  else
+    return self:_create_expanded_range(self._provider:get_default_replace_range(), self:get_insert_range())
+  end
 end
 
 ---Convert range encoding to LSP.PositionEncodingKind.UTF8.

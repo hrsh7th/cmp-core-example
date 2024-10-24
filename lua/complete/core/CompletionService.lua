@@ -4,7 +4,8 @@ local DocumentSelector    = require('complete.kit.LSP.DocumentSelector')
 local CompletionProvider  = require('complete.core.CompletionProvider')
 local DefaultMatcher      = require('complete.core.DefaultMatcher')
 
----@alias complete.core.CompletionService.OnUpdate fun(payload: { trigger_context: complete.core.TriggerContext, matches: complete.core.Match[] }): nil
+---@alias complete.core.CompletionService.OnUpdate fun(payload: complete.core.CompletionService.OnUpdate.Payload): nil
+---@alias complete.core.CompletionService.OnUpdate.Payload { trigger_context: complete.core.TriggerContext, matches: complete.core.Match[] }
 
 ---@class complete.core.CompletionService.ProviderConfiguration
 ---@field provider complete.core.CompletionProvider
@@ -51,6 +52,29 @@ function CompletionService:on_update(callback)
   end
 end
 
+---Return completion is in progress or not.
+---@return boolean
+function CompletionService:is_completing()
+  for _, provider_group in ipairs(self._option.provider_groups) do
+    for _, provider_configuration in ipairs(provider_group) do
+      if provider_configuration.provider:get_ready_state() == CompletionProvider.ReadyState.Fetching then
+        return true
+      end
+    end
+  end
+  return false
+end
+
+---Clear completion.
+function CompletionService:clear()
+  for _, provider_group in ipairs(self._option.provider_groups) do
+    for _, provider_configuration in ipairs(provider_group) do
+      provider_configuration.provider:clear()
+    end
+  end
+  self._state = nil
+end
+
 ---Complete.
 ---@param trigger_context complete.core.TriggerContext
 ---@return complete.kit.Async.AsyncTask
@@ -70,12 +94,8 @@ function CompletionService:complete(trigger_context)
     for _, provider_configuration in ipairs(group) do
       if self:_is_capable(trigger_context, provider_configuration.provider) then
         table.insert(tasks, (
-          provider_configuration.provider:complete(trigger_context):next(function(completion_context)
-            if not completion_context then
-              -- wasn't invoked new completion.
-              return
-            end
-            self:_display(TriggerContext.create()) -- new trigger_context for async context.
+          provider_configuration.provider:complete(trigger_context):next(function()
+            self:update(TriggerContext.create())
           end)
         ))
       end
@@ -83,15 +103,15 @@ function CompletionService:complete(trigger_context)
   end
 
   -- filter phase.
-  self:_display(trigger_context)
+  self:update(trigger_context)
 
   -- return current completions.
   return Async.all(tasks)
 end
 
----Display completion.
+---Update completion.
 ---@param trigger_context complete.core.TriggerContext
-function CompletionService:_display(trigger_context)
+function CompletionService:update(trigger_context)
   for _, group in ipairs(self._option.provider_groups) do
     -- get capable providers from current group.
     local provider_configurations = {} --[=[@type complete.core.CompletionService.ProviderConfiguration[]]=]
@@ -119,7 +139,7 @@ function CompletionService:_display(trigger_context)
           return a.score > b.score
         end)
 
-        -- emit event.
+        -- completion found.
         self._events.on_update = self._events.on_update or {}
         for _, c in ipairs(self._events.on_update --[=[@as complete.core.CompletionService.OnUpdate[]]=]) do
           c({
@@ -130,6 +150,15 @@ function CompletionService:_display(trigger_context)
         return
       end
     end
+  end
+
+  -- no completion found.
+  self._events.on_update = self._events.on_update or {}
+  for _, c in ipairs(self._events.on_update --[=[@as complete.core.CompletionService.OnUpdate[]]=]) do
+    c({
+      trigger_context = trigger_context,
+      matches = {}
+    })
   end
 end
 

@@ -83,7 +83,8 @@ function spec.setup(option)
       })
     end,
   })
-  provider:complete(TriggerContext.create()):sync()
+
+  provider:complete(TriggerContext.create({ force = true })):sync()
 
   -- Insert filtering query after request.
   if option.input then

@@ -16,34 +16,39 @@ local function run(name, fn)
 end
 
 describe('complete.misc.spec.benchmark', function()
-  it('tailwindcss', function()
-    spec.start_profile()
-    local _, provider = spec.setup({
-      input = 'g:',
-      buffer_text = {
-        '|',
-      },
-      item_defaults = tailwindcss_fixture.itemDefaults,
-      is_incomplete = tailwindcss_fixture.isIncomplete,
-      items = tailwindcss_fixture.items,
-    })
-    local service = CompletionService.new({
-      provider_groups = {
-        {
+  for _, isIncomplete in ipairs({ true, false }) do
+    it(('isIncomplete=%s'):format(isIncomplete), function()
+      spec.start_profile()
+      local _, provider = spec.setup({
+        buffer_text = {
+          '|',
+        },
+        item_defaults = tailwindcss_fixture.itemDefaults,
+        is_incomplete = isIncomplete,
+        items = tailwindcss_fixture.items,
+      })
+      local service = CompletionService.new({
+        provider_groups = {
           {
-            provider = provider
+            {
+              provider = provider
+            }
           }
         }
-      }
-    })
+      })
 
-    for i = 0, 3 do
-      run(('tailwindcss: %s'):format(i), function()
-        for _ = 0, 20 do
-          service:complete(TriggerContext.create({ force = true }))
-        end
-      end)
-    end
-    spec.print_profile()
-  end)
+      local bufnr = vim.api.nvim_get_current_buf()
+      for i = 1, 3 do
+        run(('isIncomplete=%s: %s'):format(isIncomplete, i), function()
+          service:complete(TriggerContext.new('i', 0, 0, '', bufnr))
+          service:complete(TriggerContext.new('i', 0, 1, 'g', bufnr))
+          service:complete(TriggerContext.new('i', 0, 2, 'gr', bufnr))
+          service:complete(TriggerContext.new('i', 0, 3, 'gro', bufnr))
+          service:complete(TriggerContext.new('i', 0, 4, 'grou', bufnr))
+          service:complete(TriggerContext.new('i', 0, 5, 'group', bufnr))
+        end)
+      end
+      spec.print_profile()
+    end)
+  end
 end)

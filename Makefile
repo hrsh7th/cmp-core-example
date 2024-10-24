@@ -8,7 +8,7 @@ lint:
 
 .PHONY: test
 test:
-	vusted --output=gtest --pattern=.spec ./lua
+	NVIM_LISTEN_ADDRESS=/tmp/nvimvusted vusted --output=gtest --pattern=.spec ./lua
 
 .PHONY: pre-commit
 pre-commit:

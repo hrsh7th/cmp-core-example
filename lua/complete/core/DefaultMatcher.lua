@@ -59,7 +59,6 @@ local function fuzzy(query, label, matches)
     end
   end
 
-  -- Remaining text fuzzy match.
   local matched = false
   local label_offset = 0
   local label_index = matches[#matches] and (matches[#matches].label_match_end + 1) or 1
@@ -81,14 +80,14 @@ local function fuzzy(query, label, matches)
       match_count = match_count + 1
     else
       if matched then
-        table.insert(matches, {
+        matches[#matches + 1] = {
           query_match_start = query_match_start,
           query_match_end = query_index - 1,
           label_match_start = label_match_start,
           label_match_end = label_index + label_offset - 1,
           strict_ratio = strict_count / match_count,
           fuzzy = true,
-        })
+        }
       end
       matched = false
     end
@@ -96,14 +95,14 @@ local function fuzzy(query, label, matches)
   end
 
   if matched and query_index > #query then
-    table.insert(matches, {
+    matches[#matches + 1] = {
       query_match_start = query_match_start,
       query_match_end = query_match_end,
       label_match_start = label_match_start,
       label_match_end = label_index + label_offset - 1,
       strict_ratio = strict_count / match_count,
       fuzzy = true,
-    })
+    }
     return matches
   end
   return nil
@@ -192,7 +191,7 @@ function DefaultMatcher.matcher(query, label)
 
   -- query is too long.
   if #query > #label then
-    return unpack(NO_MATCH)
+    return 0, {}
   end
 
   -- gather matched regions
@@ -208,7 +207,7 @@ function DefaultMatcher.matcher(query, label)
       query_start_index = match.query_match_start + 1
       query_end_index = match.query_match_end + 1
       label_index = Character.get_next_semantic_index(label, match.label_match_end)
-      table.insert(matches, match)
+      matches[#matches + 1] = match
     else
       label_index = Character.get_next_semantic_index(label, label_index)
     end
@@ -220,7 +219,7 @@ function DefaultMatcher.matcher(query, label)
     if fuzzy(query, label, matches) then
       return 1, convert_matches(matches)
     end
-    return unpack(NO_MATCH)
+    return 0, {}
   end
 
   -- check prefix match
@@ -252,7 +251,7 @@ function DefaultMatcher.matcher(query, label)
     if fuzzy(query, label, matches) then
       return score, convert_matches(matches)
     end
-    return unpack(NO_MATCH)
+    return 0, {}
   end
 
   return score + NOT_FUZZY_FACTOR, convert_matches(matches)
