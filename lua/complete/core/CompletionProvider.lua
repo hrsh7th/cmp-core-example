@@ -49,10 +49,10 @@ end
 ---@field public is_incomplete? boolean
 ---@field public items? complete.core.CompletionItem[]
 ---@field public matches? complete.core.Match[]
----@field public matched_text? string
----@field public matched_items? complete.core.CompletionItem[]
----@field public matched_cursor_offset? integer
----@field public matched_keyword_offset? integer
+---@field public matches_items? complete.core.CompletionItem[]
+---@field public matches_before_text? string
+---@field public matches_cursor_offset? integer
+---@field public matches_keyword_offset? integer
 
 ---@class complete.core.CompletionProvider
 ---@field private _source complete.core.CompletionSource
@@ -157,9 +157,8 @@ function CompletionProvider:complete(trigger_context)
     end
 
     -- keep completion state for isIncomplete completion.
-    local keep_completion = self._state.is_incomplete and
-        completion_context.triggerKind == LSP.CompletionTriggerKind.TriggerForIncompleteCompletions
-    if not keep_completion then
+    local is_not_incomplete_completion = not self._state.is_incomplete or completion_context.triggerKind ~= LSP.CompletionTriggerKind.TriggerForIncompleteCompletions
+    if not is_not_incomplete_completion then
       self._state = { ready_state = ReadyState.Waiiting }
     end
     self._state.ready_state = ReadyState.Fetching
@@ -187,15 +186,15 @@ end
 function CompletionProvider:_adopt_response(trigger_context, list)
   self._state.ready_state = ReadyState.Completed
   self._state.is_incomplete = list.isIncomplete or false
-  self._state.items = kit.clear(self._state.items)
+  self._state.items = {}
   for _, item in ipairs(list.items) do
     self._state.items[#self._state.items + 1] = CompletionItem.new(trigger_context, self, list, item)
   end
-  self._state.matches = kit.clear(self._state.matches)
-  self._state.matched_text = nil
-  self._state.matched_items = kit.clear(self._state.matched_items)
-  self._state.matched_cursor_offset = nil
-  self._state.matched_keyword_offset = nil
+  self._state.matches = {}
+  self._state.matches_items = {}
+  self._state.matches_before_text = nil
+  self._state.matches_cursor_offset = nil
+  self._state.matches_keyword_offset = nil
 end
 
 ---Resolve completion item (completionItem/resolve).
@@ -255,30 +254,30 @@ end
 function CompletionProvider:get_matches(trigger_context, matcher)
   local next_cursor_offset = trigger_context.character + 1
   local next_keyword_offset = trigger_context:get_keyword_offset(self:get_keyword_pattern()) or -1
-  local prev_cursor_offset = self._state.matched_cursor_offset or -2
-  local prev_keyword_offset = self._state.matched_keyword_offset or -2
-  self._state.matched_cursor_offset = next_cursor_offset
-  self._state.matched_keyword_offset = next_keyword_offset
-
-  -- skip matching.
-  if self._state.matched_text == trigger_context.text and prev_cursor_offset == next_cursor_offset and prev_keyword_offset == next_keyword_offset then
-    return self._state.matches
-  end
+  local next_before_text = trigger_context.text_before
+  local prev_cursor_offset = self._state.matches_cursor_offset or -2
+  local prev_keyword_offset = self._state.matches_keyword_offset or -2
+  local prev_before_text = self._state.matches_before_text
+  self._state.matches_before_text = next_before_text
+  self._state.matches_cursor_offset = next_cursor_offset
+  self._state.matches_keyword_offset = next_keyword_offset
 
   local target_items = self._state.items or {}
-
-  local is_continue_matcihng = prev_keyword_offset == next_keyword_offset and prev_cursor_offset <= next_cursor_offset
-  if is_continue_matcihng then
-    target_items = self._state.matched_items or {}
+  local is_forward_completion = prev_keyword_offset == next_keyword_offset and prev_cursor_offset <= next_cursor_offset
+  if is_forward_completion then
+    if prev_cursor_offset == next_cursor_offset and prev_before_text == next_before_text then
+      return self._state.matches
+    elseif prev_before_text == next_before_text:sub(1, #prev_before_text) then
+      target_items = self._state.matches_items or {}
+    end
   end
 
-  self._state.matches = kit.clear(self._state.matches)
-  self._state.matched_text = trigger_context.text
-  self._state.matched_items = {}
+  self._state.matches = {}
+  self._state.matches_items = {}
   for _, item in ipairs(target_items) do
     local score, match_positions = matcher(trigger_context:get_query(item:get_offset()), item:get_filter_text())
     if score > 0 then
-      self._state.matched_items[#self._state.matched_items + 1] = item
+      self._state.matches_items[#self._state.matches_items + 1] = item
       self._state.matches[#self._state.matches + 1] = {
         provider = self,
         item = item,

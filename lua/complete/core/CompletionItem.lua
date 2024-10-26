@@ -150,6 +150,12 @@ function CompletionItem:get_insert_text_mode()
   return LSP.InsertTextMode.asIs
 end
 
+---Return item is preselect or not.
+---@return boolean
+function CompletionItem:preselect()
+  return not not self._item.preselect
+end
+
 ---Resolve completion item (completionItem/resolve).
 ---@return complete.kit.Async.AsyncTask
 function CompletionItem:resolve()

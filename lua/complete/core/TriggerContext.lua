@@ -6,6 +6,7 @@ local RegExp           = require('complete.kit.Vim.RegExp')
 ---@field public line integer 0-origin
 ---@field public character integer 0-origin utf8 byte index
 ---@field public text string
+---@field public text_before string
 ---@field public bufnr integer
 ---@field public time integer
 ---@field public force? boolean
@@ -41,8 +42,9 @@ function TriggerContext.new(mode, line, character, text, bufnr, reason)
     line = line,
     character = character,
     text = text,
+    text_before = text:sub(1, character + 1),
     bufnr = bufnr,
-    time = vim.loop.now(),
+    time = vim.uv.now(),
     force = not not (reason and reason.force),
     trigger_character = reason and reason.trigger_character,
     cache = {},

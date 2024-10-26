@@ -3,25 +3,29 @@ local TriggerContext      = require('complete.core.TriggerContext')
 local DocumentSelector    = require('complete.kit.LSP.DocumentSelector')
 local CompletionProvider  = require('complete.core.CompletionProvider')
 
+---@class complete.core.CompletionService.OnUpdate.Payload
+---@field public trigger_context complete.core.TriggerContext
+---@field public preselect? integer
+---@field public matches complete.core.Match[] }
 ---@alias complete.core.CompletionService.OnUpdate fun(payload: complete.core.CompletionService.OnUpdate.Payload): nil
----@alias complete.core.CompletionService.OnUpdate.Payload { trigger_context: complete.core.TriggerContext, matches: complete.core.Match[] }
 
 ---@class complete.core.CompletionService.ProviderConfiguration
----@field provider complete.core.CompletionProvider
----@field item_count? integer
+---@field public provider complete.core.CompletionProvider
+---@field public item_count? integer
 
 ---@class complete.core.CompletionService.Option
----@field sorter complete.core.Sorter
----@field matcher complete.core.Matcher
----@field provider_groups complete.core.CompletionService.ProviderConfiguration[][]
+---@field public sorter complete.core.Sorter
+---@field public matcher complete.core.Matcher
+---@field public provider_groups complete.core.CompletionService.ProviderConfiguration[][]
 
 ---@class complete.core.CompletionService.State
----@field trigger_context complete.core.TriggerContext
+---@field public trigger_context? complete.core.TriggerContext
+---@field public matches? complete.core.Match[]
 
 ---@class complete.core.CompletionService
 ---@field private _option complete.core.CompletionService.Option
 ---@field private _events table<string, (fun(): any)[]>
----@field private _state? complete.core.CompletionService.State
+---@field private _state complete.core.CompletionService.State
 local CompletionService   = {}
 CompletionService.__index = CompletionService
 
@@ -32,7 +36,7 @@ function CompletionService.new(option)
   return setmetatable({
     _option = option,
     _events = {},
-    _state = nil,
+    _state = {},
   }, CompletionService)
 end
 
@@ -72,16 +76,16 @@ function CompletionService:clear()
       provider_configuration.provider:clear()
     end
   end
-  self._state = nil
+  self._state = {}
 end
 
 ---Complete.
 ---@param trigger_context complete.core.TriggerContext
 ---@return complete.kit.Async.AsyncTask
 function CompletionService:complete(trigger_context)
-  local changed = not self._state or self._state.trigger_context:changed(trigger_context)
+  local changed = not self._state.trigger_context or self._state.trigger_context:changed(trigger_context)
 
-  self._state = { trigger_context = trigger_context }
+  self._state.trigger_context = trigger_context
 
   -- ignore completion.
   if not changed then
@@ -123,24 +127,40 @@ function CompletionService:update(trigger_context)
 
     -- group providers are capable.
     if #provider_configurations ~= 0 then
-      local matches = {} --[=[@type complete.core.Match[]]=]
+      local has_preselect = false
+      self._state.matches = {}
       for _, provider_configuration in ipairs(provider_configurations) do
         for _, match in ipairs(provider_configuration.provider:get_matches(trigger_context, self._option.matcher)) do
-          matches[#matches + 1] = match
+          self._state.matches[#self._state.matches + 1] = match
+          if match.item:preselect() then
+            has_preselect = true
+          end
         end
       end
 
       -- group matches are found.
-      if #matches ~= 0 then
+      if #self._state.matches ~= 0 then
         -- sort items.
-        matches = self._option.sorter(matches)
+        self._state.matches = self._option.sorter(self._state.matches)
+
+        -- preselect index.
+        local preselect = nil
+        if has_preselect then
+          for i, match in ipairs(self._state.matches) do
+            if match.item:preselect() then
+              preselect = i
+              break
+            end
+          end
+        end
 
         -- completion found.
         self._events.on_update = self._events.on_update or {}
         for _, c in ipairs(self._events.on_update --[=[@as complete.core.CompletionService.OnUpdate[]]=]) do
           c({
             trigger_context = trigger_context,
-            matches = matches
+            preselect = preselect,
+            matches = self._state.matches
           })
         end
         return
@@ -153,6 +173,7 @@ function CompletionService:update(trigger_context)
   for _, c in ipairs(self._events.on_update --[=[@as complete.core.CompletionService.OnUpdate[]]=]) do
     c({
       trigger_context = trigger_context,
+      preselect = nil,
       matches = {}
     })
   end
@@ -165,7 +186,7 @@ end
 function CompletionService:_is_capable(trigger_context, provider)
   local completion_options = provider:get_completion_options()
   return not completion_options.documentSelector or
-  DocumentSelector.score(trigger_context.bufnr, completion_options.documentSelector) ~= 0
+      DocumentSelector.score(trigger_context.bufnr, completion_options.documentSelector) ~= 0
 end
 
 return CompletionService
