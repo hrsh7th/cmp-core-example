@@ -1,8 +1,9 @@
-local spec           = require('complete.spec')
-local LSP            = require('complete.kit.LSP')
-local Async          = require('complete.kit.Async')
-local Keymap         = require('complete.kit.Vim.Keymap')
+local spec = require('complete.spec')
+local LSP = require('complete.kit.LSP')
+local Async = require('complete.kit.Async')
+local Keymap = require('complete.kit.Vim.Keymap')
 local DefaultMatcher = require('complete.ext.DefaultMatcher')
+local TriggerContext = require('complete.core.TriggerContext')
 
 ---@return complete.kit.LSP.Range
 local function range(sl, sc, el, ec)
@@ -24,7 +25,7 @@ describe('complete.core', function()
       it('should support dot-to-arrow completion (clangd)', function()
         Keymap.spec(function()
           Keymap.send('i'):await()
-          local trigger_context, provider = spec.setup({
+          local _, provider = spec.setup({
             input = 'p',
             buffer_text = { 'obj.|for' },
             items = { {
@@ -35,6 +36,7 @@ describe('complete.core', function()
               },
             } },
           })
+          local trigger_context = TriggerContext.create()
           local match = provider:get_matches(trigger_context, DefaultMatcher.matcher)[1]
           assert.equals(match.item:get_offset(), #'obj' + 1)
           assert.equals(trigger_context:get_query(match.item:get_offset()), '.p')
@@ -42,13 +44,14 @@ describe('complete.core', function()
           assert.equals(match.item:get_select_text(), '->prop')
           match.item:commit({ replace = true }):await()
           spec.assert({ 'obj->prop|' })
+          Keymap.send(Keymap.termcodes('<Esc>')):await()
         end)
       end)
 
       it('should support symbol reference completion (typescript-language-server)', function()
         Keymap.spec(function()
           Keymap.send('i'):await()
-          local trigger_context, provider = spec.setup({
+          local _, provider = spec.setup({
             input = 'S',
             buffer_text = { '[].|foo' },
             items = { {
@@ -60,6 +63,7 @@ describe('complete.core', function()
               },
             } },
           })
+          local trigger_context = TriggerContext.create()
           local match = provider:get_matches(trigger_context, DefaultMatcher.matcher)[1]
           assert.equals(match.item:get_offset(), #'[]' + 1)
           assert.equals(trigger_context:get_query(match.item:get_offset()), '.S')
@@ -67,13 +71,14 @@ describe('complete.core', function()
           assert.equals(match.item:get_select_text(), '[Symbol]')
           match.item:commit({ replace = true }):await()
           spec.assert({ '[][Symbol]|' })
+          Keymap.send(Keymap.termcodes('<Esc>')):await()
         end)
       end)
 
       it('should support indent fixing completion (vscode-html-language-server)', function()
         Keymap.spec(function()
           Keymap.send('i'):await()
-          local trigger_context, provider = spec.setup({
+          local _, provider = spec.setup({
             input = 'd',
             buffer_text = {
               '<div>',
@@ -88,6 +93,7 @@ describe('complete.core', function()
               },
             } },
           })
+          local trigger_context = TriggerContext.create()
           local match = provider:get_matches(trigger_context, DefaultMatcher.matcher)[1]
           assert.equals(match.item:get_offset(), #'  ' + 1)
           assert.equals(trigger_context:get_query(match.item:get_offset()), '</d')
@@ -99,13 +105,14 @@ describe('complete.core', function()
             '<div>',
             '</div|>',
           })
+          Keymap.send(Keymap.termcodes('<Esc>')):await()
         end)
       end)
 
       it('should support extreme additionalTextEdits completion (rust-analyzer)', function()
         Keymap.spec(function()
           Keymap.send('i'):await()
-          local trigger_context, provider = spec.setup({
+          local _, provider = spec.setup({
             input = 'd',
             buffer_text = {
               'fn main() {',
@@ -134,6 +141,7 @@ describe('complete.core', function()
               return Async.resolve(clone)
             end,
           })
+          local trigger_context = TriggerContext.create()
           local match = provider:get_matches(trigger_context, DefaultMatcher.matcher)[1]
           assert.equals(match.item:get_offset(), #'    .' + 1)
           assert.equals(trigger_context:get_query(match.item:get_offset()), 'd')
@@ -145,6 +153,7 @@ describe('complete.core', function()
             '  let s = dbg!("")|',
             '}',
           })
+          Keymap.send(Keymap.termcodes('<Esc>')):await()
         end)
       end)
     end)

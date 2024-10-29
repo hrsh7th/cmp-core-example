@@ -18,8 +18,8 @@ local function create_provider(option)
       params.configure({
         keyword_pattern = option.keyword_pattern or [[\%(-\?\d\+\%(\.\d\+\)\?\|\h\w*\%(-\w*\)*\)]],
         completion_options = {
-          triggerCharacters = { '.' }
-        }
+          triggerCharacters = { '.' },
+        },
       })
     end,
     complete = function(_)

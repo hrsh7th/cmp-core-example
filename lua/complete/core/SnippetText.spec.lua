@@ -9,4 +9,3 @@ describe('complete.core', function()
     end)
   end)
 end)
-

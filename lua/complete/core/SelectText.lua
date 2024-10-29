@@ -57,7 +57,7 @@ function SelectText.create(insert_text)
       table.remove(pairs_stack, #pairs_stack)
     end
   end
-  return insert_text
+  return (insert_text:gsub('%s*$', ''):gsub('^%s*', ''))
 end
 
 return SelectText

@@ -1,4 +1,4 @@
-local RegExp           = require('complete.kit.Vim.RegExp')
+local RegExp = require('complete.kit.Vim.RegExp')
 
 ---The TriggerContext.
 ---@class complete.core.TriggerContext
@@ -12,7 +12,7 @@ local RegExp           = require('complete.kit.Vim.RegExp')
 ---@field public force? boolean
 ---@field public trigger_character? string
 ---@field public cache table<string, any>
-local TriggerContext   = {}
+local TriggerContext = {}
 TriggerContext.__index = TriggerContext
 
 ---Create new TriggerContext from current state.
@@ -42,7 +42,7 @@ function TriggerContext.new(mode, line, character, text, bufnr, reason)
     line = line,
     character = character,
     text = text,
-    text_before = text:sub(1, character + 1),
+    text_before = text:sub(1, character),
     bufnr = bufnr,
     time = vim.uv.now(),
     force = not not (reason and reason.force),

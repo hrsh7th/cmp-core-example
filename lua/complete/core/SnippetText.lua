@@ -406,4 +406,3 @@ function SnippetText.parse(input)
 end
 
 return SnippetText
-

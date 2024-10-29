@@ -4,6 +4,7 @@ local LSP = require('complete.kit.LSP')
 local Async = require('complete.kit.Async')
 local RegExp = require('complete.kit.Vim.RegExp')
 local CompletionItem = require('complete.core.CompletionItem')
+local DocumentSelector = require('complete.kit.LSP.DocumentSelector')
 
 ---@enum complete.core.CompletionProvider.ReadyState
 local ReadyState = {
@@ -89,7 +90,7 @@ function CompletionProvider.new(source)
         if configuration.completion_options ~= nil then
           self._config.completion_options = configuration.completion_options
         end
-      end
+      end,
     })
   end
 
@@ -109,6 +110,7 @@ function CompletionProvider:complete(trigger_context)
     local completion_offset = self._state.completion_offset
     if kit.contains(trigger_characters, trigger_context.trigger_character) then
       -- trigger character based completion.
+      -- TODO: VSCode does not show completion for `const a = |` case on the @vtsls/language-server even if language-server tells `<Space>` as trigger_character.
       completion_context = {
         triggerKind = LSP.CompletionTriggerKind.TriggerCharacter,
         triggerCharacter = trigger_context.trigger_character,
@@ -125,8 +127,7 @@ function CompletionProvider:complete(trigger_context)
       local keyword_pattern = self:get_keyword_pattern()
       local next_keyword_offset = trigger_context:get_keyword_offset(keyword_pattern)
       if next_keyword_offset and next_keyword_offset < trigger_context.character + 1 then
-        local prev_keyword_offset = self._state.trigger_context and
-            self._state.trigger_context:get_keyword_offset(keyword_pattern)
+        local prev_keyword_offset = self._state.trigger_context and self._state.trigger_context:get_keyword_offset(keyword_pattern)
         local is_incomplete = self._state and self._state.is_incomplete
 
         if is_incomplete and next_keyword_offset == prev_keyword_offset then
@@ -167,7 +168,7 @@ function CompletionProvider:complete(trigger_context)
     self._state.completion_offset = completion_offset
 
     -- invoke completion.
-    local response = self._source:complete(completion_context):await()
+    local response = to_completion_list(self._source:complete(completion_context):await())
 
     -- ignore obsolete response.
     if self._state.trigger_context ~= trigger_context then
@@ -175,7 +176,7 @@ function CompletionProvider:complete(trigger_context)
     end
 
     -- adopt response.
-    self:_adopt_response(trigger_context, to_completion_list(response))
+    self:_adopt_response(trigger_context, response)
 
     return completion_context
   end)
@@ -215,6 +216,14 @@ function CompletionProvider:execute(command)
     return Async.resolve()
   end
   return self._source:execute(command)
+end
+
+---Check if the provider is capable for the trigger context.
+---@param trigger_context complete.core.TriggerContext
+---@return boolean
+function CompletionProvider:capable(trigger_context)
+  local completion_options = self:get_completion_options()
+  return not completion_options.documentSelector or DocumentSelector.score(trigger_context.bufnr, completion_options.documentSelector) ~= 0
 end
 
 ---TODO: We should decide how to get the default keyword pattern here.

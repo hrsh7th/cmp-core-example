@@ -10,7 +10,7 @@ local bufnr = vim.api.nvim_get_current_buf()
 
 local ok, cmp = pcall(require, 'cmp')
 if ok then
-  cmp.setup.buffer { completion = { autocomplete = false } }
+  cmp.setup.buffer { enabled = false }
 end
 
 ---Create complete.core.CompletionSource from active clients.
@@ -22,10 +22,25 @@ local sources = vim.iter(vim.lsp.get_clients({ bufnr = bufnr }))
     :map(function(c)
       local client = Client.new(c)
       return {
+        name = c.name,
         initialize = function(_, params)
           params.configure({
             completion_options = c.server_capabilities.completionProvider
           })
+        end,
+        resolve = function(_, completion_item)
+          return Async.run(function()
+            return client:completionItem_resolve(completion_item):await()
+          end)
+        end,
+        ---@param command complete.kit.LSP.Command
+        execute = function(_, command)
+          return Async.run(function()
+            return client:workspace_executeCommand({
+              command = command.command,
+              arguments = command.arguments
+            }):await()
+          end)
         end,
         complete = function()
           local position_params = vim.lsp.util.make_position_params()
@@ -65,4 +80,33 @@ local service = CompletionService.new({
 })
 
 -- Create DefaultView and attach buffer.
-DefaultView.new(service):attach(bufnr)
+local view = DefaultView.new(service)
+
+view:attach(bufnr)
+
+vim.keymap.set('i', '<C-n>', function()
+  local selection = view:get_selection()
+  view:select(selection and selection.index + 1 or 1)
+end)
+
+vim.keymap.set('i', '<C-p>', function()
+  local selection = view:get_selection()
+  view:select(selection and selection.index - 1 or -1)
+end)
+
+vim.keymap.set('i', '<CR>', function()
+  local selection = view:get_selection()
+  if selection then
+    local match = view:get_match_at(selection.index)
+    if match then
+      match.item:commit({
+        replace = false,
+        expand_snippet = function(snippet)
+          vim.fn['vsnip#anonymous'](snippet)
+        end
+      })
+      return
+    end
+  end
+  vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<CR>', true, false, true), 'n')
+end)

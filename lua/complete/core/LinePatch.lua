@@ -95,7 +95,7 @@ function LinePatch.apply_by_keys(bufnr, before, after, insert_text)
     Keymap.termcodes('<Cmd>setlocal backspace=2<CR>'),
     Keymap.termcodes('<Cmd>setlocal textwidth=0<CR>'),
     Keymap.termcodes('<Cmd>setlocal lazyredraw<CR>'),
-    Keymap.termcodes('<C-g>u<Left><Del>'):rep(vim.fn.strchars(before_text, true)),
+    Keymap.termcodes('<C-g>U<Left><Del>'):rep(vim.fn.strchars(before_text, true)),
     Keymap.termcodes('<Del>'):rep(vim.fn.strchars(after_text, true)),
     insert_text,
     Keymap.termcodes(('<Cmd>setlocal backspace=%s<CR>'):format(vim.go.backspace or 2)),

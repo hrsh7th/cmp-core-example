@@ -8,7 +8,30 @@ local Character = require('complete.core.Character')
 local SelectText = require('complete.core.SelectText')
 local SnippetText = require('complete.core.SnippetText')
 
----@alias complete.core.ExpandSnippet fun(s: string, option: {})
+---Get expanded range.
+---@param range_ complete.kit.LSP.Range
+---@param ... complete.kit.LSP.Range
+---@return complete.kit.LSP.Range
+local function create_expanded_range(range_, ...)
+  local max --[[@as complete.kit.LSP.Range]]
+  for _, range in ipairs({ range_, ... }) do
+    if range then
+      if not max then
+        max = kit.clone(range)
+      else
+        if range.start.character < max.start.character then
+          max.start.character = range.start.character
+        end
+        if max['end'].character < range['end'].character then
+          max['end'].character = range['end'].character
+        end
+      end
+    end
+  end
+  return max
+end
+
+---@alias complete.core.ExpandSnippet fun(s: string, option: { item: complete.core.CompletionItem })
 
 ---@class complete.core.CompletionItem
 ---@field private _trigger_context complete.core.TriggerContext
@@ -181,7 +204,7 @@ end
 ---Execute command (workspace/executeCommand).
 ---@return complete.kit.Async.AsyncTask
 function CompletionItem:execute()
-  if self._provider.execute then
+  if self._provider.execute and self._item.command then
     return self._provider:execute(self._item.command)
   end
   return Async.resolve()
@@ -201,14 +224,16 @@ function CompletionItem:commit(option)
 
     local trigger_context --[[@as complete.core.TriggerContext]]
 
+    vim.o.undolevels = vim.o.undolevels
+
+    -- Create dot-repeat context.
+    vim.o.undolevels = vim.o.undolevels
+    trigger_context = TriggerContext.create()
+    LinePatch.apply_by_func(bufnr, trigger_context.character - (self:get_offset() - 1), 0, self:get_select_text()):await()
+
     -- Restore the the buffer content to the state it was in when the request was sent.
     trigger_context = TriggerContext.create()
-    LinePatch.apply_by_func(
-      bufnr,
-      trigger_context.character - (self:get_offset() - 1),
-      0,
-      self._trigger_context.text:sub(self:get_offset(), self._trigger_context.character)
-    ):await()
+    LinePatch.apply_by_func(bufnr, trigger_context.character, 0, self._trigger_context.text_before):await()
 
     -- Make overwrite information.
     local range = option.replace and self:get_replace_range() or self:get_insert_range()
@@ -217,19 +242,23 @@ function CompletionItem:commit(option)
 
     -- Apply sync additionalTextEdits if provied.
     if self._item.additionalTextEdits then
-      vim.lsp.util.apply_text_edits(kit.map(self._item.additionalTextEdits, function(text_edit)
-        return {
-          range = self:_convert_range_encoding(text_edit.range),
-          newText = text_edit.newText,
-        }
-      end), bufnr, LSP.PositionEncodingKind.UTF8)
+      vim.lsp.util.apply_text_edits(
+        kit.map(self._item.additionalTextEdits, function(text_edit)
+          return {
+            range = self:_convert_range_encoding(text_edit.range),
+            newText = text_edit.newText,
+          }
+        end),
+        bufnr,
+        LSP.PositionEncodingKind.UTF8
+      )
     end
 
     -- Expansion (Snippet / PlainText).
     if self:get_insert_text_format() == LSP.InsertTextFormat.Snippet and option.expand_snippet then
       -- Snippet: remove range of text and expand snippet.
       LinePatch.apply_by_func(bufnr, before, after, ''):await()
-      option.expand_snippet(self:get_insert_text(), {})
+      option.expand_snippet(self:get_insert_text(), { item = self })
     else
       -- PlainText: insert text.
       LinePatch.apply_by_func(bufnr, before, after, self:get_insert_text()):await()
@@ -249,12 +278,16 @@ function CompletionItem:commit(option)
               return text_edit.range.start.line >= next_trigger_context.line
             end) > 0
             if not should_skip then
-              vim.lsp.util.apply_text_edits(kit.map(self._item.additionalTextEdits, function(text_edit)
-                return {
-                  range = self:_convert_range_encoding(text_edit.range),
-                  newText = text_edit.newText,
-                }
-              end), bufnr, LSP.PositionEncodingKind.UTF8)
+              vim.lsp.util.apply_text_edits(
+                kit.map(self._item.additionalTextEdits, function(text_edit)
+                  return {
+                    range = self:_convert_range_encoding(text_edit.range),
+                    newText = text_edit.newText,
+                  }
+                end),
+                bufnr,
+                LSP.PositionEncodingKind.UTF8
+              )
             end
           end
         end)
@@ -269,10 +302,7 @@ end
 ---Return this has textEdit or not.
 ---@return boolean
 function CompletionItem:has_text_edit()
-  return not not (
-    self._item.textEdit or
-    (self._completion_list.itemDefaults and self._completion_list.itemDefaults.editRange)
-  )
+  return not not (self._item.textEdit or (self._completion_list.itemDefaults and self._completion_list.itemDefaults.editRange))
 end
 
 ---Return insert range.
@@ -319,7 +349,7 @@ function CompletionItem:get_replace_range()
   if range then
     return self:_convert_range_encoding(range)
   else
-    return self:_create_expanded_range(self._provider:get_default_replace_range(), self:get_insert_range())
+    return create_expanded_range(self._provider:get_default_replace_range(), self:get_insert_range())
   end
 end
 
@@ -350,29 +380,6 @@ function CompletionItem:_convert_range_encoding(range)
     }
   end
   return self._trigger_context.cache[cache_key]
-end
-
----Get expanded range.
----@param range_ complete.kit.LSP.Range
----@param ... complete.kit.LSP.Range
----@return complete.kit.LSP.Range
-function CompletionItem:_create_expanded_range(range_, ...)
-  local max --[[@as complete.kit.LSP.Range]]
-  for _, range in ipairs({ range_, ... }) do
-    if range then
-      if not max then
-        max = kit.clone(range)
-      else
-        if range.start.character < max.start.character then
-          max.start.character = range.start.character
-        end
-        if max['end'].character < range['end'].character then
-          max['end'].character = range['end'].character
-        end
-      end
-    end
-  end
-  return max
 end
 
 return CompletionItem

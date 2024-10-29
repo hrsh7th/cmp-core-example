@@ -35,10 +35,10 @@ describe('complete.misc.spec.benchmark', function()
         provider_groups = {
           {
             {
-              provider = provider
-            }
-          }
-        }
+              provider = provider,
+            },
+          },
+        },
       })
 
       local bufnr = vim.api.nvim_get_current_buf()

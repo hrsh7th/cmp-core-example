@@ -1,9 +1,12 @@
 local LSP = require('complete.kit.LSP')
 local CompletionProvider = require('complete.core.CompletionProvider')
+local DefaultSorter = require('complete.ext.DefaultSorter')
+local DefaultMatcher = require('complete.ext.DefaultMatcher')
 local TriggerContext = require('complete.core.TriggerContext')
 local Async = require('complete.kit.Async')
 local assert = require('luassert')
 local LinePatch = require('complete.core.LinePatch')
+local CompletionService = require('complete.core.CompletionService')
 
 local profiling = {}
 
@@ -30,7 +33,7 @@ end
 
 ---Setup for spec.
 ---@param option complete.core.spec.setup.Option
----@return complete.core.TriggerContext, complete.core.CompletionProvider
+---@return complete.core.TriggerContext, complete.core.CompletionProvider, complete.core.CompletionService
 function spec.setup(option)
   option.mode = option.mode or 'i'
 
@@ -56,14 +59,15 @@ function spec.setup(option)
 
   local target_items = option.items or { { label = 'dummy' } }
 
-  -- Create completion provider with specified item.
+  -- Create provider.
   local provider = CompletionProvider.new({
+    name = 'dummy',
     initialize = function(_, params)
       params.configure({
         keyword_pattern = option.keyword_pattern or [[\%(-\?\d\+\%(\.\d\+\)\?\|\h\w*\%(-\w*\)*\)]],
         completion_options = {
-          triggerCharacters = { '.' }
-        }
+          triggerCharacters = { '.' },
+        },
       })
     end,
     get_position_encoding_kind = function(_)
@@ -84,7 +88,20 @@ function spec.setup(option)
     end,
   })
 
-  provider:complete(TriggerContext.create({ force = true })):sync()
+  -- Create service.
+  local service = CompletionService.new({
+    sorter = DefaultSorter.sorter,
+    matcher = DefaultMatcher.matcher,
+    provider_groups = {
+      {
+        {
+          provider = provider,
+        },
+      },
+    },
+  })
+
+  service:complete(TriggerContext.create({ force = true })):sync()
 
   -- Insert filtering query after request.
   if option.input then
@@ -92,7 +109,7 @@ function spec.setup(option)
   end
 
   ---@diagnostic disable-next-line: invisible
-  return TriggerContext.create(), provider
+  return TriggerContext.create(), provider, service
 end
 
 ---@param buffer_text string[]

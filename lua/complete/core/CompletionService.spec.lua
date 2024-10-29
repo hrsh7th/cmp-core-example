@@ -13,7 +13,7 @@ describe('complete.core', function()
         },
         items = {
           { label = 'keyword' },
-          { label = 'dummy' }
+          { label = 'dummy' },
         },
       })
       local state = {}
@@ -24,10 +24,10 @@ describe('complete.core', function()
           provider_groups = {
             {
               {
-                provider = provider
-              }
-            }
-          }
+                provider = provider,
+              },
+            },
+          },
         })
         service:on_update(function(payload_)
           state.payload = payload_

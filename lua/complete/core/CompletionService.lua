@@ -1,7 +1,6 @@
-local Async               = require('complete.kit.Async')
-local TriggerContext      = require('complete.core.TriggerContext')
-local DocumentSelector    = require('complete.kit.LSP.DocumentSelector')
-local CompletionProvider  = require('complete.core.CompletionProvider')
+local Async = require('complete.kit.Async')
+local TriggerContext = require('complete.core.TriggerContext')
+local CompletionProvider = require('complete.core.CompletionProvider')
 
 ---@class complete.core.CompletionService.OnUpdate.Payload
 ---@field public trigger_context complete.core.TriggerContext
@@ -26,7 +25,7 @@ local CompletionProvider  = require('complete.core.CompletionProvider')
 ---@field private _option complete.core.CompletionService.Option
 ---@field private _events table<string, (fun(): any)[]>
 ---@field private _state complete.core.CompletionService.State
-local CompletionService   = {}
+local CompletionService = {}
 CompletionService.__index = CompletionService
 
 ---Create a new CompletionService.
@@ -96,12 +95,10 @@ function CompletionService:complete(trigger_context)
   local tasks = {} --[=[@type complete.kit.Async.AsyncTask[]]=]
   for _, group in ipairs(self._option.provider_groups) do
     for _, provider_configuration in ipairs(group) do
-      if self:_is_capable(trigger_context, provider_configuration.provider) then
-        table.insert(tasks, (
-          provider_configuration.provider:complete(trigger_context):next(function()
-            self:update(TriggerContext.create())
-          end)
-        ))
+      if provider_configuration.provider:capable(trigger_context) then
+        table.insert(tasks, (provider_configuration.provider:complete(trigger_context):next(function()
+          self:update(TriggerContext.create())
+        end)))
       end
     end
   end
@@ -120,7 +117,7 @@ function CompletionService:update(trigger_context)
     -- get capable providers from current group.
     local provider_configurations = {} --[=[@type complete.core.CompletionService.ProviderConfiguration[]]=]
     for _, provider_configuration in ipairs(group) do
-      if self:_is_capable(trigger_context, provider_configuration.provider) and provider_configuration.provider:get_ready_state() ~= CompletionProvider.ReadyState.Waiiting then
+      if provider_configuration.provider:capable(trigger_context) and provider_configuration.provider:get_ready_state() ~= CompletionProvider.ReadyState.Waiiting then
         table.insert(provider_configurations, provider_configuration)
       end
     end
@@ -156,11 +153,13 @@ function CompletionService:update(trigger_context)
 
         -- completion found.
         self._events.on_update = self._events.on_update or {}
-        for _, c in ipairs(self._events.on_update --[=[@as complete.core.CompletionService.OnUpdate[]]=]) do
+        for _, c in
+          ipairs(self._events.on_update --[=[@as complete.core.CompletionService.OnUpdate[]]=])
+        do
           c({
             trigger_context = trigger_context,
             preselect = preselect,
-            matches = self._state.matches
+            matches = self._state.matches,
           })
         end
         return
@@ -170,23 +169,15 @@ function CompletionService:update(trigger_context)
 
   -- no completion found.
   self._events.on_update = self._events.on_update or {}
-  for _, c in ipairs(self._events.on_update --[=[@as complete.core.CompletionService.OnUpdate[]]=]) do
+  for _, c in
+    ipairs(self._events.on_update --[=[@as complete.core.CompletionService.OnUpdate[]]=])
+  do
     c({
       trigger_context = trigger_context,
       preselect = nil,
-      matches = {}
+      matches = {},
     })
   end
-end
-
----Return specified provider is capable or not.
----@param trigger_context complete.core.TriggerContext
----@param provider complete.core.CompletionProvider
----@return boolean
-function CompletionService:_is_capable(trigger_context, provider)
-  local completion_options = provider:get_completion_options()
-  return not completion_options.documentSelector or
-      DocumentSelector.score(trigger_context.bufnr, completion_options.documentSelector) ~= 0
 end
 
 return CompletionService
