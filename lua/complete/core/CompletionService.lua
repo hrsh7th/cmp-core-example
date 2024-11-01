@@ -76,6 +76,20 @@ function CompletionService:clear()
     end
   end
   self._state = {}
+
+  local trigger_context = TriggerContext.create()
+
+  -- emit on_update.
+  self._events.on_update = self._events.on_update or {}
+  for _, c in
+  ipairs(self._events.on_update --[=[@as complete.core.CompletionService.OnUpdate[]]=])
+  do
+    c({
+      trigger_context = trigger_context,
+      preselect = nil,
+      matches = {},
+    })
+  end
 end
 
 ---Complete.
@@ -104,7 +118,9 @@ function CompletionService:complete(trigger_context)
   end
 
   -- filter phase.
-  self:update(trigger_context)
+  if not self:is_completing() then
+    self:update(trigger_context)
+  end
 
   -- return current completions.
   return Async.all(tasks)
@@ -113,56 +129,59 @@ end
 ---Update completion.
 ---@param trigger_context complete.core.TriggerContext
 function CompletionService:update(trigger_context)
-  for _, group in ipairs(self._option.provider_groups) do
-    -- get capable providers from current group.
-    local provider_configurations = {} --[=[@type complete.core.CompletionService.ProviderConfiguration[]]=]
-    for _, provider_configuration in ipairs(group) do
-      if provider_configuration.provider:capable(trigger_context) and provider_configuration.provider:get_ready_state() ~= CompletionProvider.ReadyState.Waiiting then
-        table.insert(provider_configurations, provider_configuration)
-      end
-    end
-
-    -- group providers are capable.
-    if #provider_configurations ~= 0 then
-      local has_preselect = false
-      self._state.matches = {}
-      for _, provider_configuration in ipairs(provider_configurations) do
-        for _, match in ipairs(provider_configuration.provider:get_matches(trigger_context, self._option.matcher)) do
-          self._state.matches[#self._state.matches + 1] = match
-          if match.item:preselect() then
-            has_preselect = true
-          end
+  local acceptable = false
+  acceptable = acceptable or not self._state.trigger_context
+  acceptable = acceptable or (self._state.trigger_context.bufnr == trigger_context.bufnr and self._state.trigger_context.line == trigger_context.line)
+  if acceptable then
+    for _, group in ipairs(self._option.provider_groups) do
+      -- get capable providers from current group.
+      local provider_configurations = {} --[=[@type complete.core.CompletionService.ProviderConfiguration[]]=]
+      for _, provider_configuration in ipairs(group) do
+        if provider_configuration.provider:capable(trigger_context) and provider_configuration.provider:get_ready_state() ~= CompletionProvider.ReadyState.Waiiting then
+          table.insert(provider_configurations, provider_configuration)
         end
       end
 
-      -- group matches are found.
-      if #self._state.matches ~= 0 then
-        -- sort items.
-        self._state.matches = self._option.sorter(self._state.matches)
-
-        -- preselect index.
-        local preselect = nil
-        if has_preselect then
-          for i, match in ipairs(self._state.matches) do
-            if match.item:preselect() then
-              preselect = i
-              break
+      -- group providers are capable.
+      if #provider_configurations ~= 0 then
+        local has_preselect = false
+        self._state.matches = {}
+        for _, provider_configuration in ipairs(provider_configurations) do
+          for _, match in ipairs(provider_configuration.provider:get_matches(trigger_context, self._option.matcher)) do
+            self._state.matches[#self._state.matches + 1] = match
+            if match.item:is_preselect() then
+              has_preselect = true
             end
           end
         end
 
-        -- completion found.
-        self._events.on_update = self._events.on_update or {}
-        for _, c in
-          ipairs(self._events.on_update --[=[@as complete.core.CompletionService.OnUpdate[]]=])
-        do
-          c({
-            trigger_context = trigger_context,
-            preselect = preselect,
-            matches = self._state.matches,
-          })
+        -- group matches are found.
+        if #self._state.matches ~= 0 then
+          -- sort items.
+          self._state.matches = self._option.sorter(self._state.matches)
+
+          -- preselect index.
+          local preselect = nil
+          if has_preselect then
+            for i, match in ipairs(self._state.matches) do
+              if match.item:is_preselect() then
+                preselect = i
+                break
+              end
+            end
+          end
+
+          -- completion found.
+          self._events.on_update = self._events.on_update or {}
+          for _, c in ipairs(self._events.on_update --[=[@as complete.core.CompletionService.OnUpdate[]]=]) do
+            c({
+              trigger_context = trigger_context,
+              preselect = preselect,
+              matches = self._state.matches,
+            })
+          end
+          return
         end
-        return
       end
     end
   end
@@ -170,7 +189,7 @@ function CompletionService:update(trigger_context)
   -- no completion found.
   self._events.on_update = self._events.on_update or {}
   for _, c in
-    ipairs(self._events.on_update --[=[@as complete.core.CompletionService.OnUpdate[]]=])
+  ipairs(self._events.on_update --[=[@as complete.core.CompletionService.OnUpdate[]]=])
   do
     c({
       trigger_context = trigger_context,
@@ -178,6 +197,18 @@ function CompletionService:update(trigger_context)
       matches = {},
     })
   end
+end
+
+---Commit completion.
+---@param item complete.core.CompletionItem
+---@param option? { replace?: boolean, expand_snippet?: complete.core.ExpandSnippet }
+function CompletionService:commit(item, option)
+  return item:commit({
+    replace = option and option.replace,
+    expand_snippet = option and option.expand_snippet,
+  }):next(function()
+    self:clear()
+  end)
 end
 
 return CompletionService

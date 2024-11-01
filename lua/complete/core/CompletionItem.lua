@@ -87,10 +87,28 @@ function CompletionItem:get_offset()
   return self._cache[cache_key]
 end
 
----Return label.
+---Return label text.
 ---@return string
-function CompletionItem:get_label()
+function CompletionItem:get_label_text()
   return self._item.label
+end
+
+---Return label details.
+---@return complete.kit.LSP.CompletionItemLabelDetails
+function CompletionItem:get_label_details()
+  local cache_key = 'get_label_details'
+  if not self._cache[cache_key] then
+    if self._item.labelDetails then
+      self._cache[cache_key] = self._item.labelDetails
+    elseif self._item.detail then
+      local details = {} --[[@type complete.kit.LSP.CompletionItemLabelDetails]]
+      details.detail = self._item.detail
+      self._cache[cache_key] = details
+    else
+      self._cache[cache_key] = {}
+    end
+  end
+  return self._cache[cache_key]
 end
 
 ---Return sort_text.
@@ -111,7 +129,14 @@ function CompletionItem:get_select_text()
         text = tostring(SnippetText.parse(text)) --[[@as string]]
       end
     end
-    self._cache[cache_key] = SelectText.create(text)
+    local completion_options = self._provider:get_completion_options()
+    local chars = {}
+    chars = kit.concat(chars, self._item.commitCharacters or {})
+    chars = kit.concat(chars, completion_options.triggerCharacters or {})
+    local pattern = table.concat(kit.map(chars, function(char)
+      return vim.pesc(char)
+    end), '')
+    self._cache[cache_key] = SelectText.create(text):gsub(string.format('[%s]$', pattern), '')
   end
   return self._cache[cache_key]
 end
@@ -173,10 +198,51 @@ function CompletionItem:get_insert_text_mode()
   return LSP.InsertTextMode.asIs
 end
 
+---Return detail text.
+---@return complete.kit.LSP.CompletionItemKind?
+function CompletionItem:get_kind()
+  return self._item.kind
+end
+
 ---Return item is preselect or not.
 ---@return boolean
-function CompletionItem:preselect()
+function CompletionItem:is_preselect()
   return not not self._item.preselect
+end
+
+---Return item is deprecated or not.
+---@return boolean
+function CompletionItem:is_deprecated()
+  local cache_key = 'is_deprecated'
+  if not self._cache[cache_key] then
+    if self._item.deprecated then
+      self._cache[cache_key] = true
+    elseif kit.contains(self._item.tags, LSP.CompletionItemTag.Deprecated) then
+      self._cache[cache_key] = true
+    else
+      self._cache[cache_key] = false
+    end
+  end
+  return self._cache[cache_key]
+end
+
+---Return item's documentation.
+---@return complete.kit.LSP.MarkupContent?
+function CompletionItem:get_documentation()
+  local cache_key = 'get_documentation'
+  if not self._cache[cache_key] then
+    if self._item.documentation then
+      local documentation --[[@type complete.kit.LSP.MarkupContent]]
+      if type(self._item.documentation) == 'string' then
+        documentation.kind = LSP.MarkupKind.Markdown
+        documentation.value = self._item.documentation --[[@as string]]
+      else
+        documentation = self._item.documentation --[[@as complete.kit.LSP.MarkupContent]]
+      end
+      self._cache[cache_key] = documentation
+    end
+  end
+  return self._cache[cache_key]
 end
 
 ---Resolve completion item (completionItem/resolve).
@@ -190,7 +256,7 @@ function CompletionItem:resolve()
     return self._provider:resolve(kit.merge({}, self._item)):next(function(resolved_item)
       if resolved_item then
         -- Merge resolved item to original item.
-        self._item = kit.merge(self._item, resolved_item)
+        self._item = kit.merge(resolved_item, self._item)
         self._cache = {}
       else
         -- Clear resolving cache if null was returned from server.
@@ -220,7 +286,7 @@ function CompletionItem:commit(option)
   local bufnr = vim.api.nvim_get_current_buf()
   return Async.run(function()
     -- Try resolve item.
-    Async.race({ self:resolve(), Async.timeout(200) }):await()
+    Async.race({ self:resolve(), Async.timeout(500) }):await()
 
     local trigger_context --[[@as complete.core.TriggerContext]]
 

@@ -1,4 +1,4 @@
----@class complete.core.MatchPosition { start_index: integer, end_index: integer, hl_group?: string }
+---@alias complete.core.MatchPosition { start_index: integer, end_index: integer, hl_group?: string }
 
 ---@class complete.core.Match
 ---@field provider complete.core.CompletionProvider

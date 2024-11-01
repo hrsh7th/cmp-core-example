@@ -84,29 +84,72 @@ local view = DefaultView.new(service)
 
 view:attach(bufnr)
 
-vim.keymap.set('i', '<C-n>', function()
-  local selection = view:get_selection()
-  view:select(selection and selection.index + 1 or 1)
-end)
-
-vim.keymap.set('i', '<C-p>', function()
-  local selection = view:get_selection()
-  view:select(selection and selection.index - 1 or -1)
-end)
-
-vim.keymap.set('i', '<CR>', function()
-  local selection = view:get_selection()
-  if selection then
-    local match = view:get_match_at(selection.index)
-    if match then
-      match.item:commit({
-        replace = false,
-        expand_snippet = function(snippet)
-          vim.fn['vsnip#anonymous'](snippet)
-        end
-      })
-      return
+local ok, insx = pcall(require, 'insx')
+if ok then
+  insx.add('<C-n>', {
+    enabled = function()
+      return view:is_visible()
+    end,
+    action = function()
+      local selection = view:get_selection()
+      view:select(selection and selection.index + 1 or 1)
     end
-  end
-  vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<CR>', true, false, true), 'n')
-end)
+  })
+  insx.add('<C-p>', {
+    enabled = function()
+      return view:is_visible()
+    end,
+    action = function()
+      local selection = view:get_selection()
+      view:select(selection and selection.index - 1 or 1)
+    end
+  })
+  insx.add('<CR>', {
+    enabled = function()
+      return view:get_selection() and view:get_selection().index > 0
+    end,
+    action = function()
+      local selection = view:get_selection()
+      if selection then
+        local match = view:get_match_at(selection.index)
+        if match then
+          service:commit(match.item, {
+            replace = false,
+            expand_snippet = function(snippet)
+              vim.fn['vsnip#anonymous'](snippet)
+            end
+          })
+          return
+        end
+      end
+      vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<CR>', true, false, true), 'n')
+    end
+  })
+else
+  vim.keymap.set('i', '<C-n>', function()
+    local selection = view:get_selection()
+    view:select(selection and selection.index + 1 or 1)
+  end)
+
+  vim.keymap.set('i', '<C-p>', function()
+    local selection = view:get_selection()
+    view:select(selection and selection.index - 1 or -1)
+  end)
+
+  vim.keymap.set('i', '<CR>', function()
+    local selection = view:get_selection()
+    if selection then
+      local match = view:get_match_at(selection.index)
+      if match then
+        service:commit(match.item, {
+          replace = false,
+          expand_snippet = function(snippet)
+            vim.fn['vsnip#anonymous'](snippet)
+          end
+        })
+        return
+      end
+    end
+    vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<CR>', true, false, true), 'n')
+  end)
+end

@@ -284,14 +284,17 @@ function CompletionProvider:get_matches(trigger_context, matcher)
   self._state.matches = {}
   self._state.matches_items = {}
   for _, item in ipairs(target_items) do
-    local score, match_positions = matcher(trigger_context:get_query(item:get_offset()), item:get_filter_text())
+    local query_text = trigger_context:get_query(item:get_offset())
+    local filter_text = item:get_filter_text()
+    local score, match_positions = matcher(query_text, filter_text)
     if score > 0 then
+      local label_text = item:get_label_text()
       self._state.matches_items[#self._state.matches_items + 1] = item
       self._state.matches[#self._state.matches + 1] = {
         provider = self,
         item = item,
         score = score,
-        match_positions = match_positions,
+        match_positions = label_text ~= filter_text and select(2, matcher(query_text, label_text)) or match_positions,
       }
     end
   end

@@ -70,6 +70,10 @@ function TriggerContext:changed(new_trigger_context)
     return true
   end
 
+  if self.bufnr ~= new_trigger_context.bufnr then
+    return true
+  end
+
   if self.mode ~= new_trigger_context.mode then
     return true
   end
@@ -83,10 +87,6 @@ function TriggerContext:changed(new_trigger_context)
   end
 
   if self.text ~= new_trigger_context.text then
-    return true
-  end
-
-  if self.bufnr ~= new_trigger_context.bufnr then
     return true
   end
 
