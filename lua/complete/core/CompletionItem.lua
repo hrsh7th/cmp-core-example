@@ -69,8 +69,7 @@ function CompletionItem:get_offset()
       self._cache[cache_key] = keyword_offset
     else
       local insert_range = self:get_insert_range()
-      local trigger_context_cache_key = string.format('%s:%s:%s', 'get_offset', keyword_offset,
-        insert_range.start.character)
+      local trigger_context_cache_key = string.format('%s:%s:%s', 'get_offset', keyword_offset, insert_range.start.character)
       if not self._trigger_context.cache[trigger_context_cache_key] then
         local offset = insert_range.start.character + 1
         for i = offset, keyword_offset do
@@ -250,25 +249,21 @@ function CompletionItem:get_documentation()
     -- CompletionItem.detail.
     local label_details = self:get_label_details()
     if label_details.detail then
-      local value = ('```%s\n%s\n```'):format(
-        vim.api.nvim_get_option_value('filetype', { buf = self._trigger_context.bufnr }),
-        label_details.detail
-      )
-      if documentation.value ~= '' then
-        value = ('%s\n---\n%s'):format(value, documentation.value)
+      local has_already = documentation.value:find(label_details.detail, 1, true)
+      if not has_already then
+        local value = ('```%s\n%s\n```'):format(vim.api.nvim_get_option_value('filetype', { buf = self._trigger_context.bufnr }), label_details.detail)
+        if documentation.value ~= '' then
+          value = ('%s\n%s'):format(value, documentation.value)
+        end
+        documentation.value = value
       end
-      documentation.value = value
     end
 
     -- return nil if documentation does not provided.
     if documentation.value == '' then
       documentation = nil
     else
-      documentation.value = documentation.value
-          :gsub('\r\n', '\n')
-          :gsub('\r', '\n')
-          :gsub('^[%s\n]+', '')
-          :gsub('[%s\n]+$', '')
+      documentation.value = documentation.value:gsub('\r\n', '\n'):gsub('\r', '\n'):gsub('^[%s\n]+', ''):gsub('[%s\n]+$', '')
     end
     self._cache[cache_key] = documentation
   end
@@ -297,7 +292,7 @@ end
 ---@return complete.kit.Async.AsyncTask
 function CompletionItem:execute()
   if self._provider.execute and self._item.command then
-    return self._provider:execute(self._item.command)
+    return self._provider:execute(self._item.command):catch(function() end)
   end
   return Async.resolve()
 end
@@ -337,12 +332,15 @@ function CompletionItem:commit(option)
     -- Apply sync additionalTextEdits if provied.
     if self._item.additionalTextEdits then
       vim.lsp.util.apply_text_edits(
-        kit.map(self._item.additionalTextEdits, function(text_edit)
-          return {
-            range = self:_convert_range_encoding(text_edit.range),
-            newText = text_edit.newText,
-          }
-        end),
+        vim
+          .iter(self._item.additionalTextEdits)
+          :map(function(text_edit)
+            return {
+              range = self:_convert_range_encoding(text_edit.range),
+              newText = text_edit.newText,
+            }
+          end)
+          :totable(),
         bufnr,
         LSP.PositionEncodingKind.UTF8
       )
@@ -373,12 +371,15 @@ function CompletionItem:commit(option)
             end) > 0
             if not should_skip then
               vim.lsp.util.apply_text_edits(
-                kit.map(self._item.additionalTextEdits, function(text_edit)
-                  return {
-                    range = self:_convert_range_encoding(text_edit.range),
-                    newText = text_edit.newText,
-                  }
-                end),
+                kit
+                  .iter(self._item.additionalTextEdits)
+                  :map(function(text_edit)
+                    return {
+                      range = self:_convert_range_encoding(text_edit.range),
+                      newText = text_edit.newText,
+                    }
+                  end)
+                  :totable(),
                 bufnr,
                 LSP.PositionEncodingKind.UTF8
               )
@@ -404,7 +405,8 @@ end
 ---NOTE: This range is utf-8 byte length based.
 ---@return complete.kit.LSP.Range
 function CompletionItem:get_insert_range()
-  local range --[[@as complete.kit.LSP.Range]]
+  ---@type complete.kit.LSP.Range
+  local range
   if self._item.textEdit then
     if self._item.textEdit.insert then
       range = self._item.textEdit.insert
@@ -415,7 +417,7 @@ function CompletionItem:get_insert_range()
     if self._completion_list.itemDefaults.editRange.insert then
       range = self._completion_list.itemDefaults.editRange.insert
     else
-      range = self._completion_list.itemDefaults.editRange
+      range = self._completion_list.itemDefaults.editRange --[[@as complete.kit.LSP.Range]]
     end
   end
   if range then
@@ -455,20 +457,15 @@ function CompletionItem:_convert_range_encoding(range)
     return range
   end
 
-  local cache_key = string.format('%s:%s', 'CompletionItem:_convert_range_encoding', range.start.character,
-    range['end'].character, from_encoding)
+  local cache_key = string.format('%s:%s', 'CompletionItem:_convert_range_encoding', range.start.character, range['end'].character, from_encoding)
   if not self._trigger_context.cache[cache_key] then
-    local start_cache_key = string.format('%s:%s:%s', 'CompletionItem:_convert_range_encoding:start',
-      range.start.character, from_encoding)
+    local start_cache_key = string.format('%s:%s:%s', 'CompletionItem:_convert_range_encoding:start', range.start.character, from_encoding)
     if not self._trigger_context.cache[start_cache_key] then
-      self._trigger_context.cache[start_cache_key] = Position.to_utf8(self._trigger_context.text, range.start,
-        from_encoding)
+      self._trigger_context.cache[start_cache_key] = Position.to_utf8(self._trigger_context.text, range.start, from_encoding)
     end
-    local end_cache_key = string.format('%s:%s:%s', 'CompletionItem:_convert_range_encoding:end', range['end'].character,
-      from_encoding)
+    local end_cache_key = string.format('%s:%s:%s', 'CompletionItem:_convert_range_encoding:end', range['end'].character, from_encoding)
     if not self._trigger_context.cache[end_cache_key] then
-      self._trigger_context.cache[end_cache_key] = Position.to_utf8(self._trigger_context.text, range['end'],
-        from_encoding)
+      self._trigger_context.cache[end_cache_key] = Position.to_utf8(self._trigger_context.text, range['end'], from_encoding)
     end
     self._trigger_context.cache[cache_key] = {
       start = self._trigger_context.cache[start_cache_key],

@@ -68,4 +68,3 @@ api.get_cursor_before_line = function()
 end
 
 return api
-

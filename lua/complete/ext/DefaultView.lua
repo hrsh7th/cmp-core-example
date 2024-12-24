@@ -50,7 +50,7 @@ local components = {
     resolve = function(item)
       return {
         vim.fn.strcharpart(item:get_label_text(), 0, 48),
-        'CmpItemAbbr'
+        'CmpItemAbbr',
       }
     end,
   },
@@ -61,7 +61,7 @@ local components = {
     resolve = function(item)
       return {
         vim.fn.strcharpart(item:get_label_details().description or '', 0, 28),
-        'Comment'
+        'Comment',
       }
     end,
   },
@@ -112,16 +112,12 @@ function DefaultView.new(service, option)
     win:set_win_option('foldenable', false)
     win:set_win_option('wrap', false)
     if self._option.border then
-      win:set_win_option('winhighlight',
-        'NormalFloat:Normal,Normal:Normal,FloatBorder:FloatBorder,CursorLine:Visual,Search:None')
+      win:set_win_option('winhighlight', 'NormalFloat:Normal,Normal:Normal,FloatBorder:FloatBorder,CursorLine:Visual,Search:None')
     else
-      win:set_win_option('winhighlight',
-        'NormalFloat:Pmenu,Normal:Pmenu,FloatBorder:Pmenu,CursorLine:PmenuSel,Search:None')
+      win:set_win_option('winhighlight', 'NormalFloat:Pmenu,Normal:Pmenu,FloatBorder:Pmenu,CursorLine:PmenuSel,Search:None')
     end
-    win:set_win_option('winhighlight', 'NormalFloat:PmenuSbar,Normal:PmenuSbar,EndOfBuffer:PmenuSbar,Search:None',
-      'scrollbar_track')
-    win:set_win_option('winhighlight', 'NormalFloat:PmenuThumb,Normal:PmenuThumb,EndOfBuffer:PmenuThumb,Search:None',
-      'scrollbar_thumb')
+    win:set_win_option('winhighlight', 'NormalFloat:PmenuSbar,Normal:PmenuSbar,EndOfBuffer:PmenuSbar,Search:None', 'scrollbar_track')
+    win:set_win_option('winhighlight', 'NormalFloat:PmenuThumb,Normal:PmenuThumb,EndOfBuffer:PmenuThumb,Search:None', 'scrollbar_thumb')
   end
   return self
 end
@@ -372,9 +368,7 @@ function DefaultView._insert_selection(text_before, item)
 
   if #text_before < cursor then
     -- del overtyping chars.
-    table.insert(keys, Keymap.termcodes('<C-g>U<Left><Del>'):rep(
-      vim.fn.strchars(text:sub(#text_before + 1, cursor), true)
-    ))
+    table.insert(keys, Keymap.termcodes('<C-g>U<Left><Del>'):rep(vim.fn.strchars(text:sub(#text_before + 1, cursor), true)))
   elseif #text_before > cursor then
     -- add removed chars.
     table.insert(keys, text_before:sub(cursor + 1))
@@ -383,9 +377,7 @@ function DefaultView._insert_selection(text_before, item)
   -- apply `select_text`.
   if item then
     if offset < #text_before then
-      table.insert(keys, Keymap.termcodes('<C-g>U<Left><Del>'):rep(
-        vim.fn.strchars(text_before:sub(offset + 1), true)
-      ))
+      table.insert(keys, Keymap.termcodes('<C-g>U<Left><Del>'):rep(vim.fn.strchars(text_before:sub(offset + 1), true)))
     end
     table.insert(keys, item:get_select_text())
   end
@@ -425,11 +417,7 @@ function DefaultView:_update_docs(item)
     })
 
     -- set buffer contents.
-    Markdown.set(
-      self._docs_window:get_buf(),
-      self._ns_id,
-      vim.split(documentation.value, '\n', { plain = true })
-    )
+    Markdown.set(self._docs_window:get_buf(), self._ns_id, vim.split(documentation.value, '\n', { plain = true }))
 
     local docs_viewport = self._docs_window:compute_viewport({
       area_width = math.floor(vim.o.columns * 0.5),
@@ -447,7 +435,7 @@ function DefaultView:_update_docs(item)
     end
 
     self._docs_window:show({
-      row = row --[[@as integer]],
+      row = row,--[[@as integer]]
       col = col,
       width = docs_viewport.inner_width,
       height = docs_viewport.inner_height,

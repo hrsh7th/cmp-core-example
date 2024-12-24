@@ -398,31 +398,31 @@ end
 function CompletionService:commit(item, option)
   local resume = self:prevent()
   return item
-      :commit({
-        replace = option and option.replace,
-        expand_snippet = option and option.expand_snippet,
-      })
-      :next(resume)
-      :next(function()
-        self:clear()
+    :commit({
+      replace = option and option.replace,
+      expand_snippet = option and option.expand_snippet,
+    })
+    :next(resume)
+    :next(function()
+      self:clear()
 
-        -- re-trigger completion for trigger characters.
-        local trigger_context = TriggerContext.create()
-        for _, provider_group in ipairs(self:_get_provider_groups()) do
-          local provider_configurations = {} --[=[@type complete.core.CompletionService.ProviderConfiguration[]]=]
-          for _, provider_configuration in ipairs(provider_group) do
-            if provider_configuration.provider:capable(trigger_context) then
-              table.insert(provider_configurations, provider_configuration)
-            end
-          end
-          for _, provider_configuration in ipairs(provider_configurations) do
-            local completion_options = provider_configuration.provider:get_completion_options()
-            if vim.tbl_contains(completion_options.triggerCharacters or {}, trigger_context.before_character) then
-              return self:complete(trigger_context)
-            end
+      -- re-trigger completion for trigger characters.
+      local trigger_context = TriggerContext.create()
+      for _, provider_group in ipairs(self:_get_provider_groups()) do
+        local provider_configurations = {} --[=[@type complete.core.CompletionService.ProviderConfiguration[]]=]
+        for _, provider_configuration in ipairs(provider_group) do
+          if provider_configuration.provider:capable(trigger_context) then
+            table.insert(provider_configurations, provider_configuration)
           end
         end
-      end)
+        for _, provider_configuration in ipairs(provider_configurations) do
+          local completion_options = provider_configuration.provider:get_completion_options()
+          if vim.tbl_contains(completion_options.triggerCharacters or {}, trigger_context.before_character) then
+            return self:complete(trigger_context)
+          end
+        end
+      end
+    end)
 end
 
 ---Prevent completion.

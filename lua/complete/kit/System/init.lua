@@ -82,7 +82,7 @@ function System.DelimiterBuffering:create(callback)
     buffer = {},
     buffer_pos = 1,
     delimiter_pos = 1,
-    match_pos = nil --[[@as integer?]],
+    match_pos = nil,--[[@as integer?]]
   }
 
   local function len()

@@ -18,10 +18,12 @@ local kit = require('complete.kit')
 
 local Markdown = {}
 
+local escaped_characters = { '\\', '`', '*', '_', '{', '}', '[', ']', '<', '>', '(', ')', '#', '+', '-', '.', '!', '|' }
+
 ---Trim empty lines.
 ---@param contents string[]
 ---@return string[]
-local function trim_empty(contents)
+local function trim_empty_lines(contents)
   contents = kit.clone(contents)
   for i = 1, #contents do
     if contents[i] == '' then
@@ -53,7 +55,7 @@ local function prepare_markdown_contents(raw_contents)
     ---@type complete.core.Markdown.Section
     local current = {
       type = 'markdown',
-      contents = {}
+      contents = {},
     }
     for _, content in ipairs(raw_contents) do
       if content:match('^```') then
@@ -65,24 +67,24 @@ local function prepare_markdown_contents(raw_contents)
           current = {
             type = 'code_block',
             language = language,
-            contents = {}
+            contents = {},
           }
         else
           table.insert(sections, current)
           current = {
             type = 'markdown',
-            contents = {}
+            contents = {},
           }
         end
       else
         if current.type == 'markdown' and content:match('^---+$') then
           table.insert(sections, current)
           table.insert(sections, {
-            type = 'separator'
+            type = 'separator',
           })
           current = {
             type = 'markdown',
-            contents = {}
+            contents = {},
           }
         else
           table.insert(current.contents, content)
@@ -96,19 +98,19 @@ local function prepare_markdown_contents(raw_contents)
   for i = #sections, 1, -1 do
     local section = sections[i]
     if section.type == 'code_block' then
-      section.contents = trim_empty(section.contents)
+      section.contents = trim_empty_lines(section.contents)
       if #section.contents == 0 then
         table.remove(sections, i)
       end
     elseif section.type == 'markdown' then
-      section.contents = trim_empty(section.contents)
+      section.contents = trim_empty_lines(section.contents)
       if #section.contents == 0 then
         table.remove(sections, i)
       end
 
       -- shrink linebreak for markdown rules.
       for j = #section.contents, 1, -1 do
-        if section.contents[j] == '' and section.contents[j - 1] ~= '' then
+        if section.contents[j - 1] ~= '' and section.contents[j] == '' then
           table.remove(section.contents, j)
         end
       end
@@ -120,7 +122,7 @@ local function prepare_markdown_contents(raw_contents)
   local languages = {} ---@type table<string, complete.core.Markdown.Range>
   local conceals = {} ---@type complete.core.Markdown.Conceal[]
   for i, section in ipairs(sections) do
-    -- insert empty line around plain code-block.
+    -- insert empty lines between different sections.
     if i > 1 and #sections > 1 and section.type ~= 'separator' and sections[i - 1].type ~= 'separator' then
       table.insert(contents, '')
     end
@@ -144,13 +146,13 @@ local function prepare_markdown_contents(raw_contents)
           if c == '\\' then
             -- escape sequence. @see https://github.com/mattcone/markdown-guide/blob/master/_basic-syntax/escaping-characters.md
             local n = content:sub(j + 1, j + 1)
-            if vim.tbl_contains({ '\\', '`', '*', '_', '{', '}', '[', ']', '<', '>', '(', ')', '#', '+', '-', '.', '!', '|' }, n) then
+            if vim.tbl_contains(escaped_characters, n) then
               table.insert(conceals, {
                 row = #contents,
                 col = j - 1,
                 end_row = #contents,
                 end_col = j,
-                conceal = ''
+                conceal = '',
               })
               j = j + 1
             end
@@ -166,7 +168,7 @@ local function prepare_markdown_contents(raw_contents)
                 col = j,
                 end_row = #contents,
                 end_col = j + 1,
-                conceal = ''
+                conceal = '',
               })
               j = j + 2
             end
@@ -197,9 +199,12 @@ function Markdown.set(bufnr, ns_id, raw_contents)
     local language = vim.treesitter.language.get_lang(maybe_language) or maybe_language
     local parser = vim.treesitter.languagetree.new(bufnr, language)
     ---@diagnostic disable-next-line: invisible
-    parser:set_included_regions(vim.iter(ranges):map(function(range)
-      return { range }
-    end):totable())
+    parser:set_included_regions(vim
+      .iter(ranges)
+      :map(function(range)
+        return { range }
+      end)
+      :totable())
     for _, range in ipairs(ranges) do
       parser:parse(range)
       parser:for_each_tree(function(tree, ltree)
@@ -208,8 +213,8 @@ function Markdown.set(bufnr, ns_id, raw_contents)
         local highlighter_query = highlighter:get_query(language)
         for capture, node, metadata in highlighter_query:query():iter_captures(tree:root(), bufnr) do
           ---@diagnostic disable-next-line: invisible
-          local hlid = highlighter_query:get_hl_from_capture(capture)
-          if hlid then
+          local hl_id = highlighter_query:get_hl_from_capture(capture)
+          if hl_id then
             local start_row, start_col, end_row, end_col = node:range(false)
 
             -- TODO: hack for nvim's treesitter.
@@ -217,14 +222,13 @@ function Markdown.set(bufnr, ns_id, raw_contents)
             local conceal = metadata.conceal or metadata[capture] and metadata[capture].conceal
             local capture_name = highlighter_query:query().captures[capture]
             if conceal or vim.tbl_contains({ 'string.escape' }, capture_name) then
-              hlid = nil
+              hl_id = nil
             end
 
-            local conceal = metadata.conceal or metadata[capture] and metadata[capture].conceal
             vim.api.nvim_buf_set_extmark(bufnr, ns_id, start_row, start_col, {
               end_row = end_row,
               end_col = end_col,
-              hl_group = hlid,
+              hl_group = hl_id,
               priority = tonumber(metadata.priority or metadata[capture] and metadata[capture].priority),
               conceal = conceal,
             })

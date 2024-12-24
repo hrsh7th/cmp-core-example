@@ -145,8 +145,7 @@ function CompletionProvider:complete(trigger_context)
       else
         -- this branch means `keyword_completion is selected but does not match the keyword_pattern`.
         -- drop previous completion response if previous completion is not a trigger_character completion.
-        local is_not_trigger_character_completion = not self._state.completion_context or
-        self._state.completion_context.triggerKind ~= LSP.CompletionTriggerKind.TriggerCharacter
+        local is_not_trigger_character_completion = not self._state.completion_context or self._state.completion_context.triggerKind ~= LSP.CompletionTriggerKind.TriggerCharacter
         if is_not_trigger_character_completion then
           self:clear()
         end
@@ -159,8 +158,7 @@ function CompletionProvider:complete(trigger_context)
     end
 
     local keep_state = true
-    keep_state = keep_state and
-    completion_context.triggerKind == LSP.CompletionTriggerKind.TriggerForIncompleteCompletions
+    keep_state = keep_state and completion_context.triggerKind == LSP.CompletionTriggerKind.TriggerForIncompleteCompletions
     keep_state = keep_state and self._state.request_state == RequestState.Completed
     if not keep_state then
       self._state.request_state = RequestState.Fetching
@@ -228,8 +226,7 @@ end
 ---@return boolean
 function CompletionProvider:capable(trigger_context)
   local completion_options = self:get_completion_options()
-  return not completion_options.documentSelector or
-  DocumentSelector.score(trigger_context.bufnr, completion_options.documentSelector) ~= 0
+  return not completion_options.documentSelector or DocumentSelector.score(trigger_context.bufnr, completion_options.documentSelector) ~= 0
 end
 
 ---Return LSP.PositionEncodingKind.

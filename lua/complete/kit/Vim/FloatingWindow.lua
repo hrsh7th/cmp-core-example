@@ -62,7 +62,6 @@ local function show_or_move(win, buf, config)
   elseif config.anchor == 'SE' then
     config.row = config.row - config.height - border_size.top - border_size.bottom
     config.col = config.col - config.width - border_size.right - border_size.left
-  else
   end
   config.anchor = 'NW'
 
@@ -288,9 +287,10 @@ function FloatingWindow:is_visible()
 end
 
 ---Conpute border size.
+---@param _ complete.kit.Vim.FloatingWindow
 ---@param border nil | string | string[]
 ---@return { top: integer, right: integer, bottom: integer, left: integer }
-function FloatingWindow:compute_border_size(border)
+function FloatingWindow.compute_border_size(_, border)
   return compute_border_size(border)
 end
 
@@ -329,8 +329,7 @@ function FloatingWindow:compute_viewport(config)
 
   local inner_height = math.min(content_height, config.area_height - border_size.top - border_size.bottom)
   local scrollbar = content_height > inner_height
-  local inner_width = math.min(content_width,
-    config.area_width - border_size.left - border_size.right - (scrollbar and 1 or 0))
+  local inner_width = math.min(content_width, config.area_width - border_size.left - border_size.right - (scrollbar and 1 or 0))
   return {
     content_width = content_width,
     content_height = content_height,

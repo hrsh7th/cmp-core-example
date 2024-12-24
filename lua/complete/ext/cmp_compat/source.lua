@@ -40,10 +40,10 @@ local function create_provider_by_cmp(cmp_source)
       return Async.new(function(resolve)
         cmp_source:execute({ command = command } --[[@as any]], resolve)
       end)
-    end
+    end,
   })
 end
 
 return {
-  create_provider_by_cmp = create_provider_by_cmp
+  create_provider_by_cmp = create_provider_by_cmp,
 }
