@@ -67,6 +67,26 @@ function CompletionItem:get_offset()
     local keyword_offset = self._provider:get_keyword_offset()
     if not self:has_text_edit() then
       self._cache[cache_key] = keyword_offset
+      -- TODO: is this unneeded?
+      -- local text = self:get_select_text()
+      -- local min_offset = math.max(1, keyword_offset - #text)
+      -- for i = keyword_offset - 1, min_offset, -1 do
+      --   if Character.is_semantic_index(self._trigger_context.text_before, i) then
+      --     local m = false
+      --     local k = 1
+      --     for j = i, #self._trigger_context.text_before - 1 do
+      --       if self._trigger_context.text_before:byte(j) == text:byte(k) then
+      --         k = k + 1
+      --       else
+      --         m = false
+      --         break
+      --       end
+      --     end
+      --     if m then
+      --       self._cache[cache_key] = i
+      --     end
+      --   end
+      -- end
     else
       local insert_range = self:get_insert_range()
       local trigger_context_cache_key = string.format('%s:%s:%s', 'get_offset', keyword_offset,
@@ -119,7 +139,7 @@ end
 
 ---Return select text that will be inserted if the item is selected.
 ---NOTE: VSCode doesn't have the text inserted when item was selected. This is vim specific implementation.
----@reutrn string
+---@return string
 function CompletionItem:get_select_text()
   local cache_key = 'get_select_text'
   if not self._cache[cache_key] then
@@ -152,11 +172,12 @@ function CompletionItem:get_filter_text()
     local text = self._item.filterText or self._item.label
     text = text:gsub('^%s+', ''):gsub('%s+$', '')
 
+    -- TODO: this is vim specific implementation and can have some of the pitfalls.
     -- Fix filter_text for non-VSCode compliant servers such as clangd.
     local delta = self._provider:get_keyword_offset() - self:get_offset()
     if delta > 0 then
       local prefix = self._trigger_context.text:sub(self:get_offset(), self._provider:get_keyword_offset() - 1)
-      if text:sub(1, #prefix) ~= prefix then
+      if not prefix:match('^%a') and text:sub(1, #prefix) ~= prefix then
         text = prefix .. text
       end
     end

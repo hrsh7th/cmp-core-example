@@ -156,6 +156,48 @@ describe('complete.core', function()
           Keymap.send(Keymap.termcodes('<Esc>')):await()
         end)
       end)
+
+      it('should support EmmyLua annotation completion (lua-language-server)', function()
+        -- This test verifies that the filterText correction for clangd does not cause any problems with lua-language-server completion.
+        Keymap.spec(function()
+          Keymap.send('i'):await()
+          local _, provider = spec.setup({
+            input = '',
+            buffer_text = {
+              '---@param a complete.|',
+            },
+            items = {
+              {
+                label = "complete.kit.LSP.CompletionItemLabelDetails",
+                textEdit = {
+                  newText = "complete.kit.LSP.CompletionItemLabelDetails",
+                  range = range(0, 12, 0, 21)
+                }
+              },
+              {
+                label = "dansa.kit.LSP.CompletionItemLabelDetails",
+                textEdit = {
+                  newText = "dansa.kit.LSP.CompletionItemLabelDetails",
+                  range = range(0, 12, 0, 21)
+                }
+              }
+            },
+          })
+          local trigger_context = TriggerContext.create()
+          local matches = provider:get_matches(trigger_context, DefaultMatcher.matcher)
+          assert.equals(#matches, 1)
+          local match = matches[1]
+          assert.equals(match.item:get_offset(), #'---@param a ' + 1)
+          assert.equals(trigger_context:get_query(match.item:get_offset()), 'complete.')
+          assert.equals(match.item:get_select_text(), 'complete.kit.LSP.CompletionItemLabelDetails')
+          assert.equals(match.item:get_filter_text(), 'complete.kit.LSP.CompletionItemLabelDetails')
+          match.item:commit({ replace = true }):await()
+          spec.assert({
+            '---@param a complete.kit.LSP.CompletionItemLabelDetails',
+          })
+          Keymap.send(Keymap.termcodes('<Esc>')):await()
+        end)
+      end)
     end)
   end)
 end)
