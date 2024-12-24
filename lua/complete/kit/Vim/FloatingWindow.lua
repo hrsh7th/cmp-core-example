@@ -329,7 +329,8 @@ function FloatingWindow:compute_viewport(config)
 
   local inner_height = math.min(content_height, config.area_height - border_size.top - border_size.bottom)
   local scrollbar = content_height > inner_height
-  local inner_width = math.min(content_width, config.area_width - border_size.left - border_size.right - (scrollbar and 1 or 0))
+  local inner_width = math.min(content_width,
+    config.area_width - border_size.left - border_size.right - (scrollbar and 1 or 0))
   return {
     content_width = content_width,
     content_height = content_height,
@@ -358,7 +359,7 @@ function FloatingWindow:_update_scrollbar()
       do
         self._scrollbar_track_win = show_or_move(self._scrollbar_track_win, self._scrollbar_track_buf, {
           row = win_config.row + border_size.top,
-          col = win_config.col + viewport.outer_width - border_size.right,
+          col = win_config.col + viewport.outer_width,
           width = 1,
           height = viewport.inner_height,
           style = 'minimal',
@@ -367,11 +368,12 @@ function FloatingWindow:_update_scrollbar()
       end
       do
         local topline = vim.fn.getwininfo(self._win)[1].topline
-        local thumb_height = math.ceil(viewport.inner_height * (viewport.inner_height / viewport.content_height))
-        local thumb_row = math.floor(viewport.inner_height * (topline / viewport.content_height))
+        local ratio = topline / (viewport.content_height - viewport.inner_height)
+        local thumb_height = math.max(1, math.floor(viewport.inner_height / viewport.content_height * viewport.inner_height))
+        local thumb_row = math.floor((viewport.inner_height - thumb_height) * ratio)
         self._scrollbar_thumb_win = show_or_move(self._scrollbar_thumb_win, self._scrollbar_thumb_buf, {
           row = win_config.row + border_size.top + thumb_row,
-          col = win_config.col + viewport.outer_width - border_size.right,
+          col = win_config.col + viewport.outer_width,
           width = 1,
           height = thumb_height,
           style = 'minimal',

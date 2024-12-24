@@ -16,8 +16,8 @@ return {
       if not buf_state[buf] then
         local service = CompletionService.new({})
         local view = DefaultView.new(service, {
-          -- border = 'rounded'
-          border = nil
+          border = 'rounded'
+          -- border = nil
         })
         view:attach(buf)
         buf_state[buf] = { service = service, view = view }
