@@ -1,155 +1,177 @@
 local Async = require('complete.kit.Async')
+local cmp_compat = require('complete.ext.cmp_compat.source')
 local Client = require('complete.kit.LSP.Client')
 local CompletionService = require('complete.core.CompletionService')
 local CompletionProvider = require('complete.core.CompletionProvider')
-local DefaultMatcher = require('complete.ext.DefaultMatcher')
-local DefaultSorter = require('complete.ext.DefaultSorter')
 local DefaultView = require('complete.ext.DefaultView')
 
-local bufnr = vim.api.nvim_get_current_buf()
+return {
+  setup = function()
+    ---@type table<integer, { service: complete.core.CompletionService, view: complete.ext.DefaultView }>
+    local buf_state = {}
 
-local ok, cmp = pcall(require, 'cmp')
-if ok then
-  cmp.setup.buffer { enabled = false }
-end
+    ---@return { service: complete.core.CompletionService, view: complete.ext.DefaultView }
+    local function get(specified_buf)
+      local buf = (specified_buf == nil or specified_buf == 0) and vim.api.nvim_get_current_buf() or specified_buf
+      if not buf_state[buf] then
+        local service = CompletionService.new({})
+        local view = DefaultView.new(service, {
+          -- border = 'rounded'
+          border = nil
+        })
+        view:attach(buf)
+        buf_state[buf] = { service = service, view = view }
 
----Create complete.core.CompletionSource from active clients.
----@type complete.core.CompletionSource[]
-local sources = vim.iter(vim.lsp.get_clients({ bufnr = bufnr }))
-    :filter(function(c)
-      return c.server_capabilities.completionProvider ~= nil
-    end)
-    :map(function(c)
-      local client = Client.new(c)
-      return {
-        name = c.name,
-        initialize = function(_, params)
-          params.configure({
-            completion_options = c.server_capabilities.completionProvider
-          })
-        end,
-        resolve = function(_, completion_item)
-          return Async.run(function()
-            return client:completionItem_resolve(completion_item):await()
-          end)
-        end,
-        ---@param command complete.kit.LSP.Command
-        execute = function(_, command)
-          return Async.run(function()
-            return client:workspace_executeCommand({
-              command = command.command,
-              arguments = command.arguments
-            }):await()
-          end)
-        end,
-        complete = function()
-          local position_params = vim.lsp.util.make_position_params()
-          return Async.run(function()
-            return client:textDocument_completion({
-              textDocument = {
-                uri = position_params.textDocument.uri,
-              },
-              position = {
-                line = position_params.position.line,
-                character = position_params.position.character,
-              }
-            }):await()
-          end)
-        end
-      }
-    end)
-    :totable()
-
----Create complete.core.CompletionProvider from sources.
----@type complete.core.CompletionProvider[]
-local providers = vim.iter(sources):map(function(source)
-  return CompletionProvider.new(source)
-end):totable()
-
--- Create CompletionService.
-local service = CompletionService.new({
-  sorter = DefaultSorter.sorter,
-  matcher = DefaultMatcher.matcher,
-  provider_groups = {
-    vim.iter(providers):map(function(provider)
-      return {
-        provider = provider
-      }
-    end):totable()
-  }
-})
-
--- Create DefaultView and attach buffer.
-local view = DefaultView.new(service)
-
-view:attach(bufnr)
-
-local ok, insx = pcall(require, 'insx')
-if ok then
-  insx.add('<C-n>', {
-    enabled = function()
-      return view:is_visible()
-    end,
-    action = function()
-      local selection = view:get_selection()
-      view:select(selection and selection.index + 1 or 1)
-    end
-  })
-  insx.add('<C-p>', {
-    enabled = function()
-      return view:is_visible()
-    end,
-    action = function()
-      local selection = view:get_selection()
-      view:select(selection and selection.index - 1 or 1)
-    end
-  })
-  insx.add('<CR>', {
-    enabled = function()
-      return view:get_selection() and view:get_selection().index > 0
-    end,
-    action = function()
-      local selection = view:get_selection()
-      if selection then
-        local match = view:get_match_at(selection.index)
-        if match then
-          service:commit(match.item, {
-            replace = false,
-            expand_snippet = function(snippet)
-              vim.fn['vsnip#anonymous'](snippet)
+        -- register cmp sources.
+        local ok_cmp, cmp = pcall(require, 'cmp')
+        if ok_cmp then
+          for _, source in ipairs(cmp.get_registered_sources()) do
+            if source.name ~= 'nvim_lsp' and source.name ~= 'cmdline' then
+              service:register_provider(cmp_compat.create_provider_by_cmp(source), {
+                group = 2
+              })
             end
-          })
+          end
+        end
+      end
+      return buf_state[buf]
+    end
+
+    vim.api.nvim_create_autocmd('InsertEnter', {
+      callback = function()
+        get(0)
+      end
+    })
+
+    vim.api.nvim_create_autocmd('LspAttach', {
+      callback = function(e)
+        local c = vim.lsp.get_client_by_id(e.data.client_id)
+        if not c or not c.server_capabilities.completionProvider then
           return
         end
+
+        local client = Client.new(c)
+        local last_request = nil
+        get(e.buf).service:register_provider(CompletionProvider.new({
+          name = c.name,
+          initialize = function(_, params)
+            params.configure({
+              position_encoding_kind = c.offset_encoding,
+              completion_options = c.server_capabilities
+                  .completionProvider --[[@as complete.kit.LSP.CompletionRegistrationOptions]]
+            })
+          end,
+          resolve = function(_, completion_item)
+            return Async.run(function()
+              if c.server_capabilities.completionProvider.resolveProvider then
+                return client:completionItem_resolve(completion_item):await()
+              end
+              return completion_item
+            end)
+          end,
+          ---@param command complete.kit.LSP.Command
+          execute = function(_, command)
+            return Async.run(function()
+              return client:workspace_executeCommand({
+                command = command.command,
+                arguments = command.arguments
+              }):await()
+            end)
+          end,
+          complete = function(_, completion_context)
+            if last_request then
+              last_request.cancel()
+            end
+            local position_params = vim.lsp.util.make_position_params(0, c.offset_encoding)
+            return Async.run(function()
+              last_request = client:textDocument_completion({
+                textDocument = {
+                  uri = position_params.textDocument.uri,
+                },
+                position = {
+                  line = position_params.position.line,
+                  character = position_params.position.character,
+                },
+                context = completion_context
+              })
+              local response = last_request:catch(function()
+                return nil
+              end):await()
+              last_request = nil
+              return response
+            end)
+          end
+        }), {
+          priority = 1
+        })
       end
-      vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<CR>', true, false, true), 'n')
-    end
-  })
-else
-  vim.keymap.set('i', '<C-n>', function()
-    local selection = view:get_selection()
-    view:select(selection and selection.index + 1 or 1)
-  end)
+    })
 
-  vim.keymap.set('i', '<C-p>', function()
-    local selection = view:get_selection()
-    view:select(selection and selection.index - 1 or -1)
-  end)
+    do
+      local select = function(option)
+        option = option or {}
+        option.delta = option.delta or 1
+        option.preselect = option.preselect or false
+        return {
+          enabled = function()
+            return get().service:get_match_at(1)
+          end,
+          action = function()
+            local selection = get().service:get_selection()
+            get().service:select(selection and selection.index + option.delta, option.preselect)
+          end
+        }
+      end
+      local commit = function(option)
+        option = option or {}
+        option.replace = option.replace or false
+        option.select_first = option.select_first or false
+        return {
+          enabled = function()
+            return get().service and (get().service:get_selection().index > 0 or option.select_first)
+          end,
+          action = function(ctx)
+            local selection = get().service:get_selection()
+            if selection then
+              local match = get().service:get_match_at(selection.index)
+              if not match and option.select_first then
+                match = get().service:get_match_at(1)
+              end
+              if match then
+                get().service:commit(match.item, {
+                  replace = option.replace,
+                  expand_snippet = function(snippet)
+                    vim.fn['vsnip#anonymous'](snippet)
+                  end
+                })
+                return
+              end
+            end
+            ctx.next()
+          end
+        }
+      end
 
-  vim.keymap.set('i', '<CR>', function()
-    local selection = view:get_selection()
-    if selection then
-      local match = view:get_match_at(selection.index)
-      if match then
-        service:commit(match.item, {
-          replace = false,
-          expand_snippet = function(snippet)
-            vim.fn['vsnip#anonymous'](snippet)
+      local ok, insx = pcall(require, 'insx')
+      if ok then
+        insx.add('<C-n>', select({ delta = 1, preselect = false }))
+        insx.add('<C-p>', select({ delta = -1, preselect = false }))
+        insx.add('<Down>', select({ delta = 1, preselect = true }))
+        insx.add('<Up>', select({ delta = -1, preselect = true }))
+        insx.add('<CR>', commit({ select_first = true, replace = false }))
+        insx.add('<C-y>', commit({ select_first = true, replace = true }))
+        insx.add('<C-n>', {
+          enabled = function()
+            return not get().service:get_match_at(1)
+          end,
+          action = function()
+            get().service:complete(require('complete.core.TriggerContext').create({ force = true }))
           end
         })
-        return
+        insx.add('<C-Space>', function()
+          get().service:complete(require('complete.core.TriggerContext').create({ force = true }))
+        end)
       end
     end
-    vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<CR>', true, false, true), 'n')
-  end)
-end
+  end
+}

@@ -1,7 +1,5 @@
 local spec = require('complete.spec')
 local CompletionService = require('complete.core.CompletionService')
-local DefaultSorter = require('complete.ext.DefaultSorter')
-local DefaultMatcher = require('complete.ext.DefaultMatcher')
 
 describe('complete.core', function()
   describe('CompletionService', function()
@@ -18,17 +16,8 @@ describe('complete.core', function()
       })
       local state = {}
       do
-        local service = CompletionService.new({
-          sorter = DefaultSorter.sorter,
-          matcher = DefaultMatcher.matcher,
-          provider_groups = {
-            {
-              {
-                provider = provider,
-              },
-            },
-          },
-        })
+        local service = CompletionService.new({})
+        service:register_provider(provider)
         service:on_update(function(payload_)
           state.payload = payload_
         end)

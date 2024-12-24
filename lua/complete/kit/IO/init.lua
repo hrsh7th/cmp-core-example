@@ -1,4 +1,4 @@
-local uv = require('luv')
+local uv = vim.uv
 local Async = require('complete.kit.Async')
 
 local is_windows = uv.os_uname().sysname:lower() == 'windows'
@@ -104,9 +104,28 @@ IO.fs_realpath = Async.promisify(uv.fs_realpath)
 function IO.is_directory(path)
   path = IO.normalize(path)
   return Async.run(function()
-    return IO.fs_stat(path):catch(function()
-      return {}
-    end):await().type == 'directory'
+    return IO.fs_stat(path)
+      :catch(function()
+        return {}
+      end)
+      :await().type == 'directory'
+  end)
+end
+
+---Return if the path is exists.
+---@param path string
+---@return complete.kit.Async.AsyncTask
+function IO.exists(path)
+  path = IO.normalize(path)
+  return Async.run(function()
+    return IO.fs_stat(path)
+      :next(function()
+        return true
+      end)
+      :catch(function()
+        return false
+      end)
+      :await()
   end)
 end
 
@@ -384,16 +403,16 @@ function IO.normalize(path)
 
   -- homedir.
   if path:sub(1, 1) == '~' then
-    path = IO.join(uv.os_homedir(), path:sub(2))
+    path = IO.join(uv.os_homedir() or vim.fs.normalize('~'), path:sub(2))
   end
 
   -- absolute.
-  if path:sub(1, 1) == '/' then
+  if IO.is_absolute(path) then
     return path:sub(-1) == '/' and path:sub(1, -2) or path
   end
 
   -- resolve relative path.
-  local up = uv.cwd()
+  local up = assert(uv.cwd())
   up = up:sub(-1) == '/' and up:sub(1, -2) or up
   while true do
     if path:sub(1, 3) == '../' then

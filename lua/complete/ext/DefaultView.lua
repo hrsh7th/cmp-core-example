@@ -1,6 +1,7 @@
 local LSP = require('complete.kit.LSP')
 local Async = require('complete.kit.Async')
-local LinePatch = require('complete.core.LinePatch')
+local Keymap = require('complete.kit.Vim.Keymap')
+local Markdown = require('complete.core.Markdown')
 local TriggerContext = require('complete.core.TriggerContext')
 local FloatingWindow = require('complete.kit.Vim.FloatingWindow')
 
@@ -9,92 +10,152 @@ for k, v in pairs(LSP.CompletionItemKind) do
   CompletionItemKindLookup[v] = k
 end
 
----@class complete.ext.DefaultView.Selection
----@field public index number
----@field public active? boolean
----@field public before_text? string
+local padding_inline_border = { '', '', '', ' ', '', '', '', ' ' }
+
+-- icon resolver.
+local ok, MiniIcons = pcall(require, 'mini.icons')
+
+---@param completion_item_kind complete.kit.LSP.CompletionItemKind
+---@return string, string?
+local icon_resolver = function(completion_item_kind)
+  if not ok then
+    return '', ''
+  end
+  return MiniIcons.get('lsp', (CompletionItemKindLookup[completion_item_kind] or 'text'):lower())
+end
+
+local config = {
+  max_win_height = 18,
+  padding_left = 1,
+  padding_right = 1,
+  gap = 1,
+}
+
+---@type { is_label?: boolean, padding_left: integer, padding_right: integer, align: 'left' | 'right', resolve: fun(item: complete.core.CompletionItem): { [1]: string, [2]?: string } }[]
+local components = {
+  {
+    padding_left = 0,
+    padding_right = 0,
+    align = 'right',
+    resolve = function(item)
+      local kind = item:get_kind() or LSP.CompletionItemKind.Text
+      return { icon_resolver(kind) }
+    end,
+  },
+  {
+    is_label = true,
+    padding_left = 0,
+    padding_right = 0,
+    align = 'left',
+    resolve = function(item)
+      return {
+        vim.fn.strcharpart(item:get_label_text(), 0, 48),
+        'CmpItemAbbr'
+      }
+    end,
+  },
+  {
+    padding_left = 0,
+    padding_right = 0,
+    align = 'right',
+    resolve = function(item)
+      return {
+        vim.fn.strcharpart(item:get_label_details().description or '', 0, 28),
+        'Comment'
+      }
+    end,
+  },
+}
 
 ---@class complete.ext.DefaultView
 ---@field private _ns_id integer
+---@field private _option { border?: string }
 ---@field private _augroup integer
 ---@field private _service complete.core.CompletionService
----@field private _window complete.kit.Vim.FloatingWindow
+---@field private _menu_window complete.kit.Vim.FloatingWindow
+---@field private _docs_window complete.kit.Vim.FloatingWindow
 ---@field private _matches complete.core.Match[]
----@field private _selection complete.ext.DefaultView.Selection
----@field private _selection_queue complete.kit.Async.AsyncTask
----@field private _selecting integer
+---@field private _selected_item? complete.core.CompletionItem
 local DefaultView = {}
 DefaultView.__index = DefaultView
 
 ---Create DefaultView
 ---@param service complete.core.CompletionService
+---@param option? { border?: string }
 ---@return complete.ext.DefaultView
-function DefaultView.new(service)
+function DefaultView.new(service, option)
   local self = setmetatable({
     _ns_id = vim.api.nvim_create_namespace(('complete.ext.DefaultView.%s'):format(vim.uv.now())),
+    _option = option or {},
     _augroup = vim.api.nvim_create_augroup(('complete.ext.DefaultView.%s'):format(vim.uv.now()), { clear = true }),
     _service = service,
-    _window = FloatingWindow.new(),
+    _menu_window = FloatingWindow.new(),
+    _docs_window = FloatingWindow.new(),
+    _queue = Async.resolve(),
     _matches = {},
-    _selection = { index = 0 },
-    _selection_queue = Async.resolve(),
-    _selecting = 0,
   }, DefaultView)
   self._service:on_update(function(payload)
-    self:render(payload)
+    self:_on_update(payload)
   end)
-  self._window:set_buf_option('buftype', 'nofile')
-  self._window:set_buf_option('tabstop', 1)
-  self._window:set_win_option('conceallevel', 2)
-  self._window:set_win_option('concealcursor', 'n')
-  self._window:set_win_option('foldenable', false)
-  self._window:set_win_option('wrap', false)
-  self._window:set_win_option('winhighlight', 'Normal:Normal,FloatBorder:FloatBorder,CursorLine:Visual,Search:None')
-  self._window:set_win_option('winhighlight', 'EndOfBuffer:PmenuSbar,NormalFloat:PmenuSbar', 'scrollbar_track')
-  self._window:set_win_option('winhighlight', 'EndOfBuffer:PmenuThumb,NormalFloat:PmenuThumb', 'scrollbar_thumb')
+  self._service:on_select(function(payload)
+    self:_on_select(payload)
+  end)
+
+  for _, win in ipairs({ self._menu_window, self._docs_window }) do
+    win:set_buf_option('buftype', 'nofile')
+    win:set_buf_option('tabstop', 1)
+    win:set_buf_option('shiftwidth', 1)
+    win:set_win_option('scrolloff', 0)
+    win:set_win_option('conceallevel', 2)
+    win:set_win_option('concealcursor', 'n')
+    win:set_win_option('cursorlineopt', 'line')
+    win:set_win_option('foldenable', false)
+    win:set_win_option('wrap', false)
+    if self._option.border then
+      win:set_win_option('winhighlight',
+        'NormalFloat:Normal,Normal:Normal,FloatBorder:FloatBorder,CursorLine:Visual,Search:None')
+    else
+      win:set_win_option('winhighlight',
+        'NormalFloat:Pmenu,Normal:Pmenu,FloatBorder:Pmenu,CursorLine:PmenuSel,Search:None')
+    end
+    win:set_win_option('winhighlight', 'NormalFloat:PmenuSbar,Normal:PmenuSbar,EndOfBuffer:PmenuSbar,Search:None',
+      'scrollbar_track')
+    win:set_win_option('winhighlight', 'NormalFloat:PmenuThumb,Normal:PmenuThumb,EndOfBuffer:PmenuThumb,Search:None',
+      'scrollbar_thumb')
+  end
   return self
 end
 
 function DefaultView:attach(bufnr)
-  -- trigger event.
-  local char = nil
-  vim.on_key(function(_, typed)
-    if bufnr ~= vim.api.nvim_get_current_buf() then
-      return
-    end
-    if not typed or typed == '' then
-      return
-    end
-
-    local mode = vim.api.nvim_get_mode().mode
-    if mode == 'i' then
-      char = typed
-    end
-  end, self._ns_id)
+  bufnr = (bufnr == nil or bufnr == 0) and vim.api.nvim_get_current_buf() or bufnr
 
   -- TextChanged.
-  vim.api.nvim_create_autocmd({ 'TextChangedI', 'TextChangedP' }, {
+  vim.api.nvim_create_autocmd({ 'TextChangedI' }, {
     group = self._augroup,
-    buffer = bufnr,
+    pattern = ('<buffer=%s>'):format(bufnr),
     callback = function()
-      if not char then
-        return
-      end
-      if self._selecting > 0 then
-        return
-      end
-      self._service:complete(TriggerContext.create({ trigger_character = char }))
+      self._service:complete(TriggerContext.create())
+    end,
+  })
+
+  -- CursorMovedI.
+  vim.api.nvim_create_autocmd({ 'CursorMovedI' }, {
+    group = self._augroup,
+    pattern = ('<buffer=%s>'):format(bufnr),
+    callback = function()
+      self._service:update()
     end,
   })
 
   -- clear event.
-  vim.api.nvim_create_autocmd({ 'InsertLeave' }, {
+  vim.api.nvim_create_autocmd({ 'ModeChanged' }, {
     group = self._augroup,
-    buffer = bufnr,
-    callback = function()
-      self._service:clear()
-      self._window:hide()
-      self._selection = { index = 0 }
+    pattern = ('<buffer=%s>'):format(bufnr),
+    callback = function(e)
+      if e.match:sub(1, 2) == 'i:' then
+        self:close()
+        self._service:clear()
+      end
     end,
   })
 end
@@ -102,256 +163,298 @@ end
 ---Return true if window is visible.
 ---@return boolean
 function DefaultView:is_visible()
-  return self._window:is_visible()
+  return self._menu_window:is_visible()
 end
 
----Return match at index.
----@param index number
----@return complete.core.Match?
-function DefaultView:get_match_at(index)
-  return self._matches[index]
-end
-
----Return current selection.
----@return complete.ext.DefaultView.Selection
-function DefaultView:get_selection()
-  return self._selection
-end
-
----@param index number
-function DefaultView:select(index)
-  return self:_update_selection(index, false)
-end
-
----@param index number
-function DefaultView:preselect(index)
-  return self:_update_selection(index, true)
+---Close window.
+---@return nil
+function DefaultView:close()
+  self._menu_window:hide()
+  self._docs_window:hide()
 end
 
 ---@param payload complete.core.CompletionService.OnUpdate.Payload
-function DefaultView:render(payload)
-  if self._service:is_completing() then
-    return
-  end
-
-  self._selection = { index = 0 }
-  self._matches = payload.matches
-
+function DefaultView:_on_update(payload)
   -- hide window if no matches.
-  if #payload.matches == 0 then
-    self._window:hide()
+  self._matches = payload.matches
+  if #self._matches == 0 then
+    self:close()
     return
   end
 
-  -- icon resolver.
-  local ok, MiniIcons = pcall(require, 'mini.icons')
-
-  ---@param completion_item_kind complete.kit.LSP.CompletionItemKind
-  local icon_resolver = function(completion_item_kind)
-    if not ok then
-      return ''
+  ---@type fun(text: string): integer
+  local get_displaywidth
+  do
+    local cache = {}
+    get_displaywidth = function(text)
+      if not cache[text] then
+        cache[text] = vim.fn.strdisplaywidth(text)
+      end
+      return cache[text]
     end
-    return MiniIcons.get('lsp', CompletionItemKindLookup[completion_item_kind]:lower())
+  end
+
+  -- init columns.
+  ---@type { is_label?: boolean, byte_width: integer, padding_left: integer, padding_right: integer, align: 'left' | 'right', resolved: { [1]: string, [2]?: string }[] }[]
+  local columns = {}
+  for _, component in ipairs(components) do
+    table.insert(columns, {
+      is_label = component.is_label,
+      byte_width = 0,
+      padding_left = component.padding_left,
+      padding_right = component.padding_right,
+      align = component.align,
+      resolved = {},
+    })
   end
 
   -- compute columns.
-  local padding = (' '):rep(1)
-  local columns = {
-    label = {
-      max_width = 0,
-      items = {},
-    },
-    kind = {
-      max_width = 0,
-      items = {},
-    },
-    detail = {
-      max_width = 0,
-      items = {},
-    },
-    description = {
-      max_width = 0,
-      items = {},
-    }
-  } --[[@type table<'label' | 'kind' | 'detail' | 'description', { max_width: integer, items: { width: integer, text: string }[] }>]]
-  vim.api.nvim_buf_call(self._window:get_buf(), function()
-    for _, match in ipairs(self._matches) do
-      local label_text = match.item:get_label_text()
-      local label_width = vim.fn.strdisplaywidth(label_text)
-      columns.label.max_width = math.max(columns.label.max_width, label_width)
-      table.insert(columns.label.items, {
-        width = label_width,
-        text = label_text
-      })
-
-      local kind_text = icon_resolver(match.item:get_kind())
-      local kind_width = vim.fn.strdisplaywidth(kind_text)
-      columns.kind.max_width = math.max(columns.kind.max_width, kind_width)
-      table.insert(columns.kind.items, {
-        width = kind_width,
-        text = kind_text
-      })
-
-      local label_details = match.item:get_label_details()
-      local detail_text = label_details.detail or ''
-      local detail_width = vim.fn.strdisplaywidth(detail_text)
-      columns.detail.max_width = math.max(columns.detail.max_width, detail_width)
-      table.insert(columns.detail.items, {
-        width = detail_width,
-        text = detail_text
-      })
-
-      local description_text = label_details.description or ''
-      local description_width = vim.fn.strdisplaywidth(description_text)
-      columns.description.max_width = math.max(columns.description.max_width, description_width)
-      table.insert(columns.description.items, {
-        width = description_width,
-        text = description_text
-      })
-    end
-  end)
-
-  -- draw lines.
-  local offset = math.huge
-  local lines = {}
+  local min_offset = math.huge
   for i, match in ipairs(self._matches) do
-    local label_item = columns.label.items[i]
-    local kind_item = columns.kind.items[i]
-    local detail_item = columns.detail.items[i]
-    local description_item = columns.description.items[i]
-
-    local line = ('%s%s%s%s%s%s%s%s%s%s'):format(
-      padding,
-      label_item.text,
-      (' '):rep(columns.label.max_width - label_item.width + 1),
-      kind_item.text,
-      (' '):rep(columns.kind.max_width > 0 and (columns.kind.max_width - kind_item.width + 1) or 0),
-      (' '):rep(columns.detail.max_width > 0 and (columns.detail.max_width - detail_item.width + 1) or 0),
-      detail_item.text,
-      (' '):rep(columns.description.max_width > 0 and (columns.description.max_width - description_item.width + 1) or 0),
-      description_item.text,
-      padding
-    )
-    table.insert(lines, line)
-    offset = math.min(offset, match.item:get_offset())
-  end
-  vim.api.nvim_buf_set_lines(self._window:get_buf(), 0, -1, false, lines)
-
-  -- decorate lines.
-  for i, match in ipairs(self._matches) do
-    -- label.
-    for _, position in ipairs(match.match_positions) do
-      vim.api.nvim_buf_set_extmark(self._window:get_buf(), self._ns_id, i - 1, position.start_index, {
-        end_row = i - 1,
-        end_col = position.end_index + 1,
-        hl_group = position.hl_group or 'CmpItemAbbrMatch',
-        hl_mode = 'combine',
-      })
-    end
-
-    -- kind.
-    local kind_item = columns.kind.items[i]
-    if kind_item.text ~= '' then
-      local kind_hl_group = ('CmpItemKind%s'):format(CompletionItemKindLookup[match.item:get_kind()])
-      vim.api.nvim_buf_set_extmark(self._window:get_buf(), self._ns_id, i - 1, columns.label.max_width + 1, {
-        end_row = i - 1,
-        end_col = columns.label.max_width + #kind_item.text + 1,
-        hl_group = kind_hl_group,
-        hl_mode = 'combine',
-      })
+    min_offset = math.min(min_offset, match.item:get_offset())
+    for j, component in ipairs(components) do
+      local resolved = component.resolve(match.item)
+      columns[j].byte_width = math.max(columns[j].byte_width, #resolved[1])
+      columns[j].resolved[i] = resolved
     end
   end
 
-  -- show wndow.
-  local max_width = #padding
-  for _, column in pairs(columns) do
-    if column.max_width > 0 then
-      max_width = max_width + 1
+  -- remove empty columns.
+  for i = #columns, 1, -1 do
+    if columns[i].byte_width == 0 then
+      table.remove(columns, i)
     end
-    max_width = max_width + column.max_width
   end
-  max_width = max_width + #padding
 
-  local cur = vim.api.nvim_win_get_cursor(0)
-  local pos = vim.fn.screenpos(0, cur[1], offset)
-  self._window:show({
-    row = pos.row,
-    col = pos.curscol - 1 - #padding,
-    width = max_width,
-    height = math.min(#lines, 8),
-    anchor = 'NW',
-    style = 'minimal',
-    border = 'rounded',
+  -- set decoration provider.
+  vim.api.nvim_set_decoration_provider(self._ns_id, {
+    on_win = function(_, _, buf, toprow, botrow)
+      if buf ~= self._menu_window:get_buf() then
+        return
+      end
+
+      for row = toprow, botrow do
+        local off = config.padding_left
+        for _, column in ipairs(columns) do
+          local resolved = column.resolved[row + 1]
+          off = off + column.padding_left
+          vim.api.nvim_buf_set_extmark(buf, self._ns_id, row, off, {
+            end_row = row,
+            end_col = off + column.byte_width,
+            hl_group = resolved[2],
+            hl_mode = 'combine',
+            ephemeral = true,
+          })
+          if column.is_label then
+            for _, pos in ipairs(self._matches[row + 1].match_positions) do
+              vim.api.nvim_buf_set_extmark(buf, self._ns_id, row, off + pos.start_index - 1, {
+                end_row = row,
+                end_col = off + pos.end_index,
+                hl_group = pos.hl_group or 'CmpItemAbbrMatch',
+                hl_mode = 'combine',
+                ephemeral = true,
+              })
+            end
+          end
+          off = off + column.byte_width + column.padding_right + config.gap
+        end
+      end
+    end,
   })
 
-  if payload.preselect then
-    self:preselect(payload.preselect)
-  else
-    self:select(0)
+  -- create formatting.
+  local parts = {}
+  table.insert(parts, (' '):rep(config.padding_left or 1))
+  for i, column in ipairs(columns) do
+    table.insert(parts, (' '):rep(column.padding_left or 0))
+    table.insert(parts, '%s%s')
+    table.insert(parts, (' '):rep(column.padding_right or 0))
+    if i ~= #columns then
+      table.insert(parts, (' '):rep(config.gap or 1))
+    end
   end
-end
+  table.insert(parts, (' '):rep(config.padding_right or 1))
+  local formatting = table.concat(parts, '')
 
----@param index number
----@param preselect boolean
-function DefaultView:_update_selection(index, preselect)
-  self._selecting = self._selecting + 1
-
-  return Async.run(function()
-    local active = not preselect
-
-    -- update selection.
-    index = index % (vim.api.nvim_buf_line_count(self._window:get_buf()) + 1)
-    if self._selection.index == 0 then
-      self._selection.before_text = vim.api.nvim_get_current_line():sub(1, vim.api.nvim_win_get_cursor(0)[2])
-    end
-    self._selection.index = index
-    self._selection.active = active
-
-    -- apply selection.
-    if self._selection.index == 0 then
-      self._window:set_win_option('cursorline', false)
-      vim.api.nvim_win_set_cursor(self._window:get_win(), { 1, 0 })
-    else
-      self._window:set_win_option('cursorline', true)
-      vim.api.nvim_win_set_cursor(self._window:get_win(), { self._selection.index, 0 })
-    end
-
-    -- insert text.
-    if self._selection.active then
-      self:_insert_selection():await()
-    end
-
-    -- resolve item.
-    local match = self._matches[self._selection.index]
-    if match then
-      match.item:resolve()
-    end
-
-    Async.schedule():await()
-    self._selecting = self._selecting - 1
-  end)
-end
-
----@return complete.kit.Async.AsyncTask
-function DefaultView:_insert_selection()
-  self._selection_queue = self._selection_queue:next(function()
-    local cursor = vim.api.nvim_win_get_cursor(0)
-    cursor[1] = cursor[1] - 1
-
-    -- restore before text.
-    vim.api.nvim_buf_set_text(0, cursor[1], 0, cursor[1], cursor[2], { self._selection.before_text })
-    vim.api.nvim_win_set_cursor(0, { cursor[1] + 1, #self._selection.before_text })
-
-    -- insert text.
-    if self._selection.index ~= 0 then
-      local match = self._matches[self._selection.index]
-      if match then
-        return LinePatch.apply_by_keys(0, #self._selection.before_text - (match.item:get_offset() - 1), 0, match.item:get_select_text())
+  -- draw lines.
+  local display_width = 0
+  local lines = {}
+  for i in ipairs(self._matches) do
+    local args = {}
+    for _, column in ipairs(columns) do
+      local resolved = column.resolved[i]
+      if column.align == 'right' then
+        table.insert(args, (' '):rep(column.byte_width - #resolved[1]))
+        table.insert(args, resolved[1])
+      else
+        table.insert(args, resolved[1])
+        table.insert(args, (' '):rep(column.byte_width - #resolved[1]))
       end
     end
-    return Async.resolve()
+    local line = formatting:format(unpack(args))
+    table.insert(lines, line)
+    display_width = math.max(display_width, get_displaywidth(line))
+  end
+  vim.api.nvim_buf_set_lines(self._menu_window:get_buf(), 0, -1, false, lines)
+
+  -- show window.
+  local leading_text = vim.api.nvim_get_current_line():sub(min_offset, vim.fn.col('.') - 1)
+  local pos = vim.fn.screenpos(0, vim.fn.line('.'), vim.fn.col('.'))
+  local row = pos.row - 1 -- default row should be below the cursor. so we use 1-origin as-is.
+  local col = pos.col - vim.fn.strdisplaywidth(leading_text)
+
+  local border_size = self._menu_window:compute_border_size(self._option.border)
+  local row_off = 1
+  local col_off = -(border_size.left + config.padding_left) - 1 -- `-1` is first char align.
+  local anchor = 'NW'
+
+  local can_bottom = row + row_off + math.min(config.max_win_height, #self._matches) <= vim.o.lines
+  if not can_bottom then
+    anchor = 'SW'
+    row_off = 0
+  end
+
+  self._menu_window:show({
+    row = row + row_off,
+    col = col + col_off,
+    width = display_width,
+    height = math.min(#lines, 8),
+    anchor = anchor,
+    style = 'minimal',
+    border = self._option.border,
+  })
+  self._menu_window:set_win_option('cursorline', self._service:get_selection().index ~= 0)
+end
+
+---On select event.
+---@param payload complete.core.CompletionService.OnSelect.Payload
+function DefaultView:_on_select(payload)
+  if not self._menu_window:is_visible() then
+    return
+  end
+  local resume = self._service:prevent()
+  return Async.run(function()
+    -- apply selection.
+    if payload.selection.index == 0 then
+      self._menu_window:set_win_option('cursorline', false)
+      vim.api.nvim_win_set_cursor(self._menu_window:get_win(), { 1, 0 })
+    else
+      self._menu_window:set_win_option('cursorline', true)
+      vim.api.nvim_win_set_cursor(self._menu_window:get_win(), { payload.selection.index, 0 })
+    end
+
+    -- set selected_item.
+    local match = payload.matches[payload.selection.index]
+    self._selected_item = match and match.item
+
+    -- insert text.
+    if not payload.selection.preselect then
+      self._insert_selection(payload.selection.text_before, match and match.item):await()
+    end
+
+    -- show documentation.
+    self:_update_docs(self._selected_item)
+
+    resume()
   end)
-  return self._selection_queue
+end
+
+---Insert selection.
+---@param text_before string
+---@param item? complete.core.CompletionItem
+---@return complete.kit.Async.AsyncTask
+function DefaultView._insert_selection(text_before, item)
+  local text = vim.api.nvim_get_current_line()
+  local cursor = vim.api.nvim_win_get_cursor(0)[2]
+  local offset = item and item:get_offset() - 1 or #text_before
+
+  local keys = {}
+
+  if #text_before < cursor then
+    -- del overtyping chars.
+    table.insert(keys, Keymap.termcodes('<C-g>U<Left><Del>'):rep(
+      vim.fn.strchars(text:sub(#text_before + 1, cursor), true)
+    ))
+  elseif #text_before > cursor then
+    -- add removed chars.
+    table.insert(keys, text_before:sub(cursor + 1))
+  end
+
+  -- apply `select_text`.
+  if item then
+    if offset < #text_before then
+      table.insert(keys, Keymap.termcodes('<C-g>U<Left><Del>'):rep(
+        vim.fn.strchars(text_before:sub(offset + 1), true)
+      ))
+    end
+    table.insert(keys, item:get_select_text())
+  end
+  return Keymap.send(keys)
+end
+
+---Update documentation.
+---@param item? complete.core.CompletionItem
+function DefaultView:_update_docs(item)
+  if not item then
+    self._docs_window:hide()
+    return
+  end
+
+  item:resolve():next(function()
+    if item ~= self._selected_item then
+      return
+    end
+
+    if not self._menu_window:is_visible() then
+      self._docs_window:hide()
+      return
+    end
+
+    local documentation = item:get_documentation()
+    if not documentation then
+      self._docs_window:hide()
+      return
+    end
+
+    local menu_config = vim.api.nvim_win_get_config(self._menu_window:get_win())
+    local menu_border_size = self._menu_window:compute_border_size(menu_config.border)
+    local menu_viewport = self._menu_window:compute_viewport({
+      area_width = menu_config.width + menu_border_size.left + menu_border_size.right,
+      area_height = menu_config.height,
+      border = menu_config.border,
+    })
+
+    -- set buffer contents.
+    Markdown.set(
+      self._docs_window:get_buf(),
+      self._ns_id,
+      vim.split(documentation.value, '\n', { plain = true })
+    )
+
+    local docs_viewport = self._docs_window:compute_viewport({
+      area_width = math.floor(vim.o.columns * 0.5),
+      area_height = math.floor(vim.o.lines * 0.35),
+      border = menu_config.border and menu_config.border or padding_inline_border,
+    })
+
+    local row = menu_config.row
+    local col = menu_config.col + menu_viewport.outer_width + 1
+    if row + docs_viewport.outer_height > vim.o.lines then
+      row = vim.o.lines - docs_viewport.outer_height
+    end
+    if col + docs_viewport.outer_width > vim.o.columns then
+      col = menu_config.col - docs_viewport.outer_width
+    end
+
+    self._docs_window:show({
+      row = row --[[@as integer]],
+      col = col,
+      width = docs_viewport.inner_width,
+      height = docs_viewport.inner_height,
+      border = menu_config.border and menu_config.border or padding_inline_border,
+      style = 'minimal',
+    })
+  end)
 end
 
 return DefaultView

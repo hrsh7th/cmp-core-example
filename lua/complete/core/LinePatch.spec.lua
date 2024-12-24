@@ -3,7 +3,7 @@ local spec = require('complete.spec')
 local Keymap = require('complete.kit.Vim.Keymap')
 local LinePatch = require('complete.core.LinePatch')
 local TriggerContext = require('complete.core.TriggerContext')
-local DefaultMatcher = require('complete.ext.DefaultMatcher')
+local DefaultMatcher = require('complete.core.DefaultMatcher')
 
 describe('complete.core', function()
   describe('LinePatch', function()

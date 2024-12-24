@@ -4,6 +4,7 @@
 ---@field provider complete.core.CompletionProvider
 ---@field item complete.core.CompletionItem
 ---@field score integer
+---@field index integer
 ---@field match_positions complete.core.MatchPosition[]
 
 ---@alias complete.core.Matcher fun(query: string, input: string): integer, complete.core.MatchPosition[]

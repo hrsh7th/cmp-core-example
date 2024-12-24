@@ -101,7 +101,7 @@ function LinePatch.apply_by_keys(bufnr, before, after, insert_text)
     Keymap.termcodes(('<Cmd>setlocal backspace=%s<CR>'):format(vim.go.backspace or 2)),
     Keymap.termcodes(('<Cmd>setlocal textwidth=%s<CR>'):format(vim.bo.textwidth or 0)),
     Keymap.termcodes(('<Cmd>setlocal %slazyredraw<CR>'):format(vim.o.lazyredraw and '' or 'no')),
-  }, true)
+  })
 end
 
 return LinePatch

@@ -1,7 +1,5 @@
 local LSP = require('complete.kit.LSP')
 local CompletionProvider = require('complete.core.CompletionProvider')
-local DefaultSorter = require('complete.ext.DefaultSorter')
-local DefaultMatcher = require('complete.ext.DefaultMatcher')
 local TriggerContext = require('complete.core.TriggerContext')
 local Async = require('complete.kit.Async')
 local assert = require('luassert')
@@ -27,7 +25,7 @@ end
 ---@field public keyword_pattern? string
 ---@field public position_encoding_kind? complete.kit.LSP.PositionEncodingKind
 ---@field public resolve? fun(item: complete.kit.LSP.CompletionItem): complete.kit.Async.AsyncTask complete.kit.LSP.CompletionItem
----@field public item_defaults? complete.kit.LSP.CompletionList.itemDefaults
+---@field public item_defaults? complete.kit.LSP.CompletionItemDefaults
 ---@field public is_incomplete? boolean
 ---@field public items? complete.kit.LSP.CompletionItem[]
 
@@ -89,23 +87,17 @@ function spec.setup(option)
   })
 
   -- Create service.
-  local service = CompletionService.new({
-    sorter = DefaultSorter.sorter,
-    matcher = DefaultMatcher.matcher,
-    provider_groups = {
-      {
-        {
-          provider = provider,
-        },
-      },
-    },
+  local service = CompletionService.new({})
+  service:register_provider(provider, {
+    group = 1,
+    item_count = math.huge,
   })
 
-  service:complete(TriggerContext.create({ force = true })):sync()
+  service:complete(TriggerContext.create({ force = true })):sync(5000)
 
   -- Insert filtering query after request.
   if option.input then
-    LinePatch.apply_by_func(vim.api.nvim_get_current_buf(), 0, 0, option.input):sync()
+    LinePatch.apply_by_func(vim.api.nvim_get_current_buf(), 0, 0, option.input):sync(5000)
   end
 
   ---@diagnostic disable-next-line: invisible

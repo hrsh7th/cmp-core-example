@@ -2,7 +2,7 @@ local spec = require('complete.spec')
 local LSP = require('complete.kit.LSP')
 local Async = require('complete.kit.Async')
 local Keymap = require('complete.kit.Vim.Keymap')
-local DefaultMatcher = require('complete.ext.DefaultMatcher')
+local DefaultMatcher = require('complete.core.DefaultMatcher')
 local TriggerContext = require('complete.core.TriggerContext')
 
 ---@return complete.kit.LSP.Range

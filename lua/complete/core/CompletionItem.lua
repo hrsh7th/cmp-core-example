@@ -9,12 +9,11 @@ local SelectText = require('complete.core.SelectText')
 local SnippetText = require('complete.core.SnippetText')
 
 ---Get expanded range.
----@param range_ complete.kit.LSP.Range
----@param ... complete.kit.LSP.Range
+---@param ranges { [1]: complete.kit.LSP.Range } | complete.kit.LSP.Range[]
 ---@return complete.kit.LSP.Range
-local function create_expanded_range(range_, ...)
+local function create_expanded_range(ranges)
   local max --[[@as complete.kit.LSP.Range]]
-  for _, range in ipairs({ range_, ... }) do
+  for _, range in ipairs(ranges) do
     if range then
       if not max then
         max = kit.clone(range)
@@ -70,7 +69,8 @@ function CompletionItem:get_offset()
       self._cache[cache_key] = keyword_offset
     else
       local insert_range = self:get_insert_range()
-      local trigger_context_cache_key = string.format('%s:%s:%s', 'get_offset', keyword_offset, insert_range.start.character)
+      local trigger_context_cache_key = string.format('%s:%s:%s', 'get_offset', keyword_offset,
+        insert_range.start.character)
       if not self._trigger_context.cache[trigger_context_cache_key] then
         local offset = insert_range.start.character + 1
         for i = offset, keyword_offset do
@@ -98,23 +98,23 @@ end
 function CompletionItem:get_label_details()
   local cache_key = 'get_label_details'
   if not self._cache[cache_key] then
+    local details = {} --[[@type complete.kit.LSP.CompletionItemLabelDetails]]
     if self._item.labelDetails then
-      self._cache[cache_key] = self._item.labelDetails
-    elseif self._item.detail then
-      local details = {} --[[@type complete.kit.LSP.CompletionItemLabelDetails]]
-      details.detail = self._item.detail
-      self._cache[cache_key] = details
-    else
-      self._cache[cache_key] = {}
+      details.detail = details.detail or self._item.labelDetails.detail
+      details.description = details.description or self._item.labelDetails.description
     end
+    if self._item.detail then
+      details.detail = details.detail or self._item.detail
+    end
+    self._cache[cache_key] = details
   end
   return self._cache[cache_key]
 end
 
 ---Return sort_text.
----@return string
+---@return string?
 function CompletionItem:get_sort_text()
-  return self._item.sortText or self._item.label
+  return self._item.sortText
 end
 
 ---Return select text that will be inserted if the item is selected.
@@ -125,7 +125,7 @@ function CompletionItem:get_select_text()
   if not self._cache[cache_key] then
     local text = self:get_insert_text()
     if self:get_insert_text_format() == LSP.InsertTextFormat.Snippet then
-      if text:find('${', 1, true) then
+      if text:find('$', 1, true) then
         text = tostring(SnippetText.parse(text)) --[[@as string]]
       end
     end
@@ -133,10 +133,14 @@ function CompletionItem:get_select_text()
     local chars = {}
     chars = kit.concat(chars, self._item.commitCharacters or {})
     chars = kit.concat(chars, completion_options.triggerCharacters or {})
-    local pattern = table.concat(kit.map(chars, function(char)
-      return vim.pesc(char)
-    end), '')
-    self._cache[cache_key] = SelectText.create(text):gsub(string.format('[%s]$', pattern), '')
+    local select_text = SelectText.create(text)
+    for _, char in ipairs(chars) do
+      if select_text:sub(-1, -1) == char then
+        select_text = select_text:sub(1, -2)
+        break
+      end
+    end
+    self._cache[cache_key] = select_text
   end
   return self._cache[cache_key]
 end
@@ -217,7 +221,7 @@ function CompletionItem:is_deprecated()
   if not self._cache[cache_key] then
     if self._item.deprecated then
       self._cache[cache_key] = true
-    elseif kit.contains(self._item.tags, LSP.CompletionItemTag.Deprecated) then
+    elseif vim.tbl_contains(self._item.tags, LSP.CompletionItemTag.Deprecated) then
       self._cache[cache_key] = true
     else
       self._cache[cache_key] = false
@@ -231,16 +235,42 @@ end
 function CompletionItem:get_documentation()
   local cache_key = 'get_documentation'
   if not self._cache[cache_key] then
+    local documentation = { kind = LSP.MarkupKind.Markdown, value = '' } --[[@as complete.kit.LSP.MarkupContent]]
+
+    -- CompletionItem.documentation.
     if self._item.documentation then
-      local documentation --[[@type complete.kit.LSP.MarkupContent]]
       if type(self._item.documentation) == 'string' then
-        documentation.kind = LSP.MarkupKind.Markdown
         documentation.value = self._item.documentation --[[@as string]]
       else
-        documentation = self._item.documentation --[[@as complete.kit.LSP.MarkupContent]]
+        documentation.kind = self._item.documentation.kind
+        documentation.value = self._item.documentation.value
       end
-      self._cache[cache_key] = documentation
     end
+
+    -- CompletionItem.detail.
+    local label_details = self:get_label_details()
+    if label_details.detail then
+      local value = ('```%s\n%s\n```'):format(
+        vim.api.nvim_get_option_value('filetype', { buf = self._trigger_context.bufnr }),
+        label_details.detail
+      )
+      if documentation.value ~= '' then
+        value = ('%s\n---\n%s'):format(value, documentation.value)
+      end
+      documentation.value = value
+    end
+
+    -- return nil if documentation does not provided.
+    if documentation.value == '' then
+      documentation = nil
+    else
+      documentation.value = documentation.value
+          :gsub('\r\n', '\n')
+          :gsub('\r', '\n')
+          :gsub('^[%s\n]+', '')
+          :gsub('[%s\n]+$', '')
+    end
+    self._cache[cache_key] = documentation
   end
   return self._cache[cache_key]
 end
@@ -248,10 +278,6 @@ end
 ---Resolve completion item (completionItem/resolve).
 ---@return complete.kit.Async.AsyncTask
 function CompletionItem:resolve()
-  if not self._provider.resolve then
-    return Async.resolve()
-  end
-
   self._resolving = self._resolving or (function()
     return self._provider:resolve(kit.merge({}, self._item)):next(function(resolved_item)
       if resolved_item then
@@ -290,14 +316,16 @@ function CompletionItem:commit(option)
 
     local trigger_context --[[@as complete.core.TriggerContext]]
 
+    -- Create initial undo point.
     vim.o.undolevels = vim.o.undolevels
 
-    -- Create dot-repeat context.
-    vim.o.undolevels = vim.o.undolevels
+    -- Create select_text undopoint.
     trigger_context = TriggerContext.create()
-    LinePatch.apply_by_func(bufnr, trigger_context.character - (self:get_offset() - 1), 0, self:get_select_text()):await()
+    LinePatch.apply_by_keys(bufnr, trigger_context.character - (self:get_offset() - 1), 0, self:get_select_text()):await()
+    vim.o.undolevels = vim.o.undolevels
 
     -- Restore the the buffer content to the state it was in when the request was sent.
+    -- NOTE: this must not affect the dot-repeat.
     trigger_context = TriggerContext.create()
     LinePatch.apply_by_func(bufnr, trigger_context.character, 0, self._trigger_context.text_before):await()
 
@@ -412,11 +440,8 @@ function CompletionItem:get_replace_range()
       range = self._completion_list.itemDefaults.editRange.replace
     end
   end
-  if range then
-    return self:_convert_range_encoding(range)
-  else
-    return create_expanded_range(self._provider:get_default_replace_range(), self:get_insert_range())
-  end
+  range = range or self:get_insert_range()
+  return create_expanded_range({ self._provider:get_default_replace_range(), range })
 end
 
 ---Convert range encoding to LSP.PositionEncodingKind.UTF8.
@@ -430,15 +455,20 @@ function CompletionItem:_convert_range_encoding(range)
     return range
   end
 
-  local cache_key = string.format('%s:%s', 'CompletionItem:_convert_range_encoding', range.start.character, range['end'].character, from_encoding)
+  local cache_key = string.format('%s:%s', 'CompletionItem:_convert_range_encoding', range.start.character,
+    range['end'].character, from_encoding)
   if not self._trigger_context.cache[cache_key] then
-    local start_cache_key = string.format('%s:%s:%s', 'CompletionItem:_convert_range_encoding:start', range.start.character, from_encoding)
+    local start_cache_key = string.format('%s:%s:%s', 'CompletionItem:_convert_range_encoding:start',
+      range.start.character, from_encoding)
     if not self._trigger_context.cache[start_cache_key] then
-      self._trigger_context.cache[start_cache_key] = Position.to_utf8(self._trigger_context.text, range.start, from_encoding)
+      self._trigger_context.cache[start_cache_key] = Position.to_utf8(self._trigger_context.text, range.start,
+        from_encoding)
     end
-    local end_cache_key = string.format('%s:%s:%s', 'CompletionItem:_convert_range_encoding:end', range['end'].character, from_encoding)
+    local end_cache_key = string.format('%s:%s:%s', 'CompletionItem:_convert_range_encoding:end', range['end'].character,
+      from_encoding)
     if not self._trigger_context.cache[end_cache_key] then
-      self._trigger_context.cache[end_cache_key] = Position.to_utf8(self._trigger_context.text, range['end'], from_encoding)
+      self._trigger_context.cache[end_cache_key] = Position.to_utf8(self._trigger_context.text, range['end'],
+        from_encoding)
     end
     self._trigger_context.cache[cache_key] = {
       start = self._trigger_context.cache[start_cache_key],

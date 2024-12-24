@@ -7,7 +7,7 @@ local PREFIX_FACTOR = 8
 local NOT_FUZZY_FACTOR = 6
 
 ---convert_matches
----@param matches complete.ext.DefaultMatcher.MatchData[]
+---@param matches complete.core.DefaultMatcher.MatchData[]
 ---@return complete.core.MatchPosition[]
 local function convert_matches(matches)
   for _, match in ipairs(matches) do
@@ -26,7 +26,7 @@ local function convert_matches(matches)
   return matches
 end
 
----@class complete.ext.DefaultMatcher.MatchData
+---@class complete.core.DefaultMatcher.MatchData
 ---@field index? integer
 ---@field query_match_start integer
 ---@field query_match_end integer
@@ -38,8 +38,8 @@ end
 ---fuzzy
 ---@param query string
 ---@param label string
----@param matches complete.ext.DefaultMatcher.MatchData[]
----@return complete.ext.DefaultMatcher.MatchData[] | nil
+---@param matches complete.core.DefaultMatcher.MatchData[]
+---@return complete.core.DefaultMatcher.MatchData[] | nil
 local function fuzzy(query, label, matches)
   local query_index = matches[#matches] and (matches[#matches].query_match_end + 1) or 1
 
@@ -115,7 +115,7 @@ end
 ---@param query_end_index integer
 ---@param label string
 ---@param label_index integer
----@return complete.ext.DefaultMatcher.MatchData | nil
+---@return complete.core.DefaultMatcher.MatchData | nil
 local function find_match_region(query, query_start_index, query_end_index, label, label_index)
   -- determine query position ( woroff -> label_offset )
   while query_start_index < query_end_index do

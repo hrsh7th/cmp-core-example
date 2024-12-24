@@ -10,13 +10,19 @@ local RegExp = require('complete.kit.Vim.RegExp')
 ---@field public bufnr integer
 ---@field public time integer
 ---@field public force? boolean
----@field public trigger_character? string
+---@field public before_character? string
 ---@field public cache table<string, any>
 local TriggerContext = {}
 TriggerContext.__index = TriggerContext
 
+---Create empty TriggerContext.
+---@return complete.core.TriggerContext
+function TriggerContext.create_empty_context()
+  return TriggerContext.new('i', 0, 0, '', 0)
+end
+
 ---Create new TriggerContext from current state.
----@param reason? { force?: boolean, trigger_character?: string }
+---@param reason? { force?: boolean }
 ---@return complete.core.TriggerContext
 function TriggerContext.create(reason)
   local mode = vim.api.nvim_get_mode().mode --[[@as string]]
@@ -34,19 +40,20 @@ end
 ---@param character integer 0-origin
 ---@param text string
 ---@param bufnr integer
----@param reason? { force?: boolean, trigger_character?: string }
+---@param reason? { force?: boolean }
 ---@return complete.core.TriggerContext
 function TriggerContext.new(mode, line, character, text, bufnr, reason)
+  local text_before = text:sub(1, character)
   return setmetatable({
     mode = mode,
     line = line,
     character = character,
     text = text,
-    text_before = text:sub(1, character),
+    text_before = text_before,
     bufnr = bufnr,
     time = vim.uv.now(),
     force = not not (reason and reason.force),
-    trigger_character = reason and reason.trigger_character,
+    before_character = text_before:gsub('%s*$', ''):match('(.)$'),
     cache = {},
   }, TriggerContext)
 end
@@ -66,10 +73,6 @@ function TriggerContext:changed(new_trigger_context)
     return true
   end
 
-  if self.trigger_character ~= new_trigger_context.trigger_character then
-    return true
-  end
-
   if self.bufnr ~= new_trigger_context.bufnr then
     return true
   end
@@ -86,7 +89,7 @@ function TriggerContext:changed(new_trigger_context)
     return true
   end
 
-  if self.text ~= new_trigger_context.text then
+  if self.text_before ~= new_trigger_context.text_before then
     return true
   end
 

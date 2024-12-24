@@ -14,6 +14,7 @@ local function create_provider(option)
 
   local response ---@type complete.kit.LSP.CompletionList
   local provider = CompletionProvider.new({
+    name = 'dummy',
     initialize = function(_, params)
       params.configure({
         keyword_pattern = option.keyword_pattern or [[\%(-\?\d\+\%(\.\d\+\)\?\|\h\w*\%(-\w*\)*\)]],
@@ -44,31 +45,33 @@ describe('complete.core', function()
         Keymap.send('i'):await()
         assert.is_nil(provider:complete(TriggerContext.create()):await())
 
-        -- should not complete.
+        -- no_completion.
         Keymap.send(' '):await()
         assert.is_nil(provider:complete(TriggerContext.create()):await())
 
-        -- keyword_pattern -> keyword_pattern.
+        -- no_completion -> keyword_pattern & incomplete.
         Keymap.send('f'):await()
         ctx.set_response({ isIncomplete = true, items = {} })
         assert.are_not.is_nil(provider:complete(TriggerContext.create()):await())
 
-        -- isIncomplete=true
+        -- keyword_pattern & incomplete -> keyword_pattern.
         Keymap.send('o'):await()
         ctx.set_response({ isIncomplete = false, items = {} })
         assert.are_not.is_nil(provider:complete(TriggerContext.create()):await())
 
-        -- isIncomplete=false -> force=true
+        -- keyword_pattern -> force.
         Keymap.send('o'):await()
+        ctx.set_response({ isIncomplete = false, items = {} })
         assert.are_not.is_nil(provider:complete(TriggerContext.create({ force = true })):await())
 
-        -- isIncomplete=false -> force=false
+        -- keyword_pattern & force -> keyword_pattern
         Keymap.send('o'):await()
-        assert.is_nil(provider:complete(TriggerContext.create()):await())
+        ctx.set_response({ isIncomplete = false, items = {} })
+        assert.are_not.is_nil(provider:complete(TriggerContext.create()):await())
 
-        -- isIncomplete=false -> trigger_character
-        Keymap.send('o'):await()
-        assert.are_not.is_nil(provider:complete(TriggerContext.create({ trigger_character = '.' })):await())
+        -- keyword_pattern -> trigger_character
+        Keymap.send('.'):await()
+        assert.are_not.is_nil(provider:complete(TriggerContext.create()):await())
       end)
     end)
   end)

@@ -3,62 +3,54 @@ local tailwindcss_fixture = require('complete.spec.fixtures.tailwindcss')
 local spec = require('complete.spec')
 local CompletionService = require('complete.core.CompletionService')
 local TriggerContext = require('complete.core.TriggerContext')
-local DefaultSorter = require('complete.ext.DefaultSorter')
-local DefaultMatcher = require('complete.ext.DefaultMatcher')
 
 local function run(name, fn)
   collectgarbage('collect')
   collectgarbage('stop')
-  local s = os.clock()
+  local s = vim.uv.hrtime() / 1000000
   fn()
-  local e = os.clock()
-  print(('[%s]: elapsed time: %.2fsec, memory: %skb'):format(name, e - s, collectgarbage('count')))
+  local e = vim.uv.hrtime() / 1000000
+  print(('[%s]: elapsed time: %sms, memory: %skb'):format(name, e - s, collectgarbage('count')))
   print('\n')
   collectgarbage('restart')
 end
 
 describe('complete.misc.spec.benchmark', function()
+  local input = function(text)
+    local cursor = vim.api.nvim_win_get_cursor(0)
+    vim.api.nvim_buf_set_text(0, cursor[1] - 1, cursor[2], cursor[1] - 1, cursor[2], { text })
+    vim.api.nvim_win_set_cursor(0, { cursor[1], cursor[2] + #text })
+  end
   for _, isIncomplete in ipairs({ true, false }) do
     it(('isIncomplete=%s'):format(isIncomplete), function()
-      spec.start_profile()
+      local response = tailwindcss_fixture()
       local _, provider = spec.setup({
         buffer_text = {
           '|',
         },
-        item_defaults = tailwindcss_fixture.itemDefaults,
-        is_incomplete = isIncomplete,
-        items = tailwindcss_fixture.items,
+        item_defaults = response.itemDefaults,
+        is_incomplete = response.isIncomplete,
+        items = response.items,
       })
-      local service = CompletionService.new({
-        sorter = DefaultSorter.sorter,
-        matcher = DefaultMatcher.matcher,
-        provider_groups = {
-          {
-            {
-              provider = provider,
-            },
-          },
-        },
-      })
-
-      local bufnr = vim.api.nvim_get_current_buf()
+      local service = CompletionService.new({})
+      service:register_provider(provider)
       for i = 1, 3 do
+        vim.cmd.enew()
         run(('isIncomplete=%s: %s'):format(isIncomplete, i), function()
-          vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { '' })
+          input('')
+          service:complete(TriggerContext.create({ force = true }))
+          input('g')
           service:complete(TriggerContext.create())
-          vim.api.nvim_buf_set_text(bufnr, 0, 0, 0, 0, { 'g' })
-          service:complete(TriggerContext.create({ trigger_character = 'g' }))
-          vim.api.nvim_buf_set_text(bufnr, 0, 1, 0, 1, { 'r' })
-          service:complete(TriggerContext.create({ trigger_character = 'r' }))
-          vim.api.nvim_buf_set_text(bufnr, 0, 2, 0, 2, { 'o' })
-          service:complete(TriggerContext.create({ trigger_character = 'o' }))
-          vim.api.nvim_buf_set_text(bufnr, 0, 3, 0, 3, { 'u' })
-          service:complete(TriggerContext.create({ trigger_character = 'u' }))
-          vim.api.nvim_buf_set_text(bufnr, 0, 4, 0, 4, { 'p' })
-          service:complete(TriggerContext.create({ trigger_character = 'p' }))
+          input('r')
+          service:complete(TriggerContext.create())
+          input('o')
+          service:complete(TriggerContext.create())
+          input('u')
+          service:complete(TriggerContext.create())
+          input('p')
+          service:complete(TriggerContext.create())
         end)
       end
-      spec.print_profile()
     end)
   end
 end)

@@ -1,14 +1,13 @@
 ---@diagnostic disable: invisible
-local kit = require('complete.kit')
 local LSP = require('complete.kit.LSP')
 local Async = require('complete.kit.Async')
 local RegExp = require('complete.kit.Vim.RegExp')
 local CompletionItem = require('complete.core.CompletionItem')
 local DocumentSelector = require('complete.kit.LSP.DocumentSelector')
 
----@enum complete.core.CompletionProvider.ReadyState
-local ReadyState = {
-  Waiiting = 'Waiting',
+---@enum complete.core.CompletionProvider.RequestState
+local RequestState = {
+  Waiting = 'Waiting',
   Fetching = 'Fetching',
   Completed = 'Completed',
 }
@@ -20,11 +19,12 @@ local function to_completion_list(response)
   response = response or {}
   if response.items then
     response.isIncomplete = response.isIncomplete or false
+    response.items = response.items or {}
     return response
   end
   return {
     isIncomplete = false,
-    items = response,
+    items = response or {},
   }
 end
 
@@ -43,7 +43,8 @@ local function extract_keyword_range(trigger_context, keyword_pattern)
 end
 
 ---@class complete.core.CompletionProvider.State
----@field public ready_state? complete.core.CompletionProvider.ReadyState
+---@field public request_state? complete.core.CompletionProvider.RequestState
+---@field public request_time? integer
 ---@field public completion_context? complete.kit.LSP.CompletionContext
 ---@field public completion_offset? integer
 ---@field public trigger_context? complete.core.TriggerContext
@@ -52,8 +53,6 @@ end
 ---@field public matches? complete.core.Match[]
 ---@field public matches_items? complete.core.CompletionItem[]
 ---@field public matches_before_text? string
----@field public matches_cursor_offset? integer
----@field public matches_keyword_offset? integer
 
 ---@class complete.core.CompletionProvider
 ---@field private _source complete.core.CompletionSource
@@ -61,7 +60,7 @@ end
 ---@field private _state complete.core.CompletionProvider.State
 local CompletionProvider = {}
 CompletionProvider.__index = CompletionProvider
-CompletionProvider.ReadyState = ReadyState
+CompletionProvider.RequestState = RequestState
 
 ---Create new CompletionProvider.
 ---@param source complete.core.CompletionSource
@@ -74,7 +73,7 @@ function CompletionProvider.new(source)
       position_encoding_kind = LSP.PositionEncodingKind.UTF16,
       completion_options = {},
     },
-    _state = { ready_state = ReadyState.Waiiting },
+    _state = { ready_state = RequestState.Waiting },
   }, CompletionProvider)
 
   -- initialize source.
@@ -108,12 +107,12 @@ function CompletionProvider:complete(trigger_context)
     ---Check should complete for new trigger context or not.
     local completion_context ---@type complete.kit.LSP.CompletionContext
     local completion_offset = self._state.completion_offset
-    if kit.contains(trigger_characters, trigger_context.trigger_character) then
+    if vim.tbl_contains(trigger_characters, trigger_context.before_character) then
       -- trigger character based completion.
       -- TODO: VSCode does not show completion for `const a = |` case on the @vtsls/language-server even if language-server tells `<Space>` as trigger_character.
       completion_context = {
         triggerKind = LSP.CompletionTriggerKind.TriggerCharacter,
-        triggerCharacter = trigger_context.trigger_character,
+        triggerCharacter = trigger_context.before_character,
       }
       completion_offset = trigger_context.character + 1
     elseif trigger_context.force then
@@ -127,7 +126,7 @@ function CompletionProvider:complete(trigger_context)
       local keyword_pattern = self:get_keyword_pattern()
       local next_keyword_offset = trigger_context:get_keyword_offset(keyword_pattern)
       if next_keyword_offset and next_keyword_offset < trigger_context.character + 1 then
-        local prev_keyword_offset = self._state.trigger_context and self._state.trigger_context:get_keyword_offset(keyword_pattern)
+        local prev_keyword_offset = self._state.completion_offset
         local is_incomplete = self._state and self._state.is_incomplete
 
         if is_incomplete and next_keyword_offset == prev_keyword_offset then
@@ -144,8 +143,10 @@ function CompletionProvider:complete(trigger_context)
           completion_offset = next_keyword_offset
         end
       else
-        -- drop previous completion response if keyword based completion was selected and not available.
-        local is_not_trigger_character_completion = not self._state.completion_context or self._state.completion_context.triggerKind ~= LSP.CompletionTriggerKind.TriggerCharacter
+        -- this branch means `keyword_completion is selected but does not match the keyword_pattern`.
+        -- drop previous completion response if previous completion is not a trigger_character completion.
+        local is_not_trigger_character_completion = not self._state.completion_context or
+        self._state.completion_context.triggerKind ~= LSP.CompletionTriggerKind.TriggerCharacter
         if is_not_trigger_character_completion then
           self:clear()
         end
@@ -157,18 +158,20 @@ function CompletionProvider:complete(trigger_context)
       return
     end
 
-    -- keep completion state for isIncomplete completion.
-    local is_not_incomplete_completion = not self._state.is_incomplete or completion_context.triggerKind ~= LSP.CompletionTriggerKind.TriggerForIncompleteCompletions
-    if not is_not_incomplete_completion then
-      self._state = { ready_state = ReadyState.Waiiting }
+    local keep_state = true
+    keep_state = keep_state and
+    completion_context.triggerKind == LSP.CompletionTriggerKind.TriggerForIncompleteCompletions
+    keep_state = keep_state and self._state.request_state == RequestState.Completed
+    if not keep_state then
+      self._state.request_state = RequestState.Fetching
     end
-    self._state.ready_state = ReadyState.Fetching
     self._state.trigger_context = trigger_context
     self._state.completion_context = completion_context
     self._state.completion_offset = completion_offset
 
     -- invoke completion.
-    local response = to_completion_list(self._source:complete(completion_context):await())
+    local raw_response = self._source:complete(completion_context):await()
+    local response = to_completion_list(raw_response)
 
     -- ignore obsolete response.
     if self._state.trigger_context ~= trigger_context then
@@ -185,7 +188,7 @@ end
 ---Accept completion response.
 ---@param list complete.kit.LSP.CompletionList
 function CompletionProvider:_adopt_response(trigger_context, list)
-  self._state.ready_state = ReadyState.Completed
+  self._state.request_state = RequestState.Completed
   self._state.is_incomplete = list.isIncomplete or false
   self._state.items = {}
   for _, item in ipairs(list.items) do
@@ -194,8 +197,10 @@ function CompletionProvider:_adopt_response(trigger_context, list)
   self._state.matches = {}
   self._state.matches_items = {}
   self._state.matches_before_text = nil
-  self._state.matches_cursor_offset = nil
-  self._state.matches_keyword_offset = nil
+
+  if #self._state.items == 0 then
+    self._state.request_state = RequestState.Waiting
+  end
 end
 
 ---Resolve completion item (completionItem/resolve).
@@ -223,13 +228,8 @@ end
 ---@return boolean
 function CompletionProvider:capable(trigger_context)
   local completion_options = self:get_completion_options()
-  return not completion_options.documentSelector or DocumentSelector.score(trigger_context.bufnr, completion_options.documentSelector) ~= 0
-end
-
----TODO: We should decide how to get the default keyword pattern here.
----@return string
-function CompletionProvider:get_keyword_pattern()
-  return self._config.keyword_pattern
+  return not completion_options.documentSelector or
+  DocumentSelector.score(trigger_context.bufnr, completion_options.documentSelector) ~= 0
 end
 
 ---Return LSP.PositionEncodingKind.
@@ -245,60 +245,10 @@ function CompletionProvider:get_completion_options()
   return self._config.completion_options
 end
 
----Clear completion state.
-function CompletionProvider:clear()
-  self._state = { ready_state = ReadyState.Waiiting }
-end
-
----Return ready state.
----@return complete.core.CompletionProvider.ReadyState
-function CompletionProvider:get_ready_state()
-  return self._state.ready_state
-end
-
----Return completion items.
----@param trigger_context complete.core.TriggerContext
----@param matcher complete.core.Matcher
----@return complete.core.Match[]
-function CompletionProvider:get_matches(trigger_context, matcher)
-  local next_cursor_offset = trigger_context.character + 1
-  local next_keyword_offset = trigger_context:get_keyword_offset(self:get_keyword_pattern()) or -1
-  local next_before_text = trigger_context.text_before
-  local prev_cursor_offset = self._state.matches_cursor_offset or -2
-  local prev_keyword_offset = self._state.matches_keyword_offset or -2
-  local prev_before_text = self._state.matches_before_text
-  self._state.matches_before_text = next_before_text
-  self._state.matches_cursor_offset = next_cursor_offset
-  self._state.matches_keyword_offset = next_keyword_offset
-
-  local target_items = self._state.items or {}
-  local is_forward_completion = prev_keyword_offset == next_keyword_offset and prev_cursor_offset <= next_cursor_offset
-  if is_forward_completion then
-    if prev_cursor_offset == next_cursor_offset and prev_before_text == next_before_text then
-      return self._state.matches
-    elseif prev_before_text == next_before_text:sub(1, #prev_before_text) then
-      target_items = self._state.matches_items or {}
-    end
-  end
-
-  self._state.matches = {}
-  self._state.matches_items = {}
-  for _, item in ipairs(target_items) do
-    local query_text = trigger_context:get_query(item:get_offset())
-    local filter_text = item:get_filter_text()
-    local score, match_positions = matcher(query_text, filter_text)
-    if score > 0 then
-      local label_text = item:get_label_text()
-      self._state.matches_items[#self._state.matches_items + 1] = item
-      self._state.matches[#self._state.matches + 1] = {
-        provider = self,
-        item = item,
-        score = score,
-        match_positions = label_text ~= filter_text and select(2, matcher(query_text, label_text)) or match_positions,
-      }
-    end
-  end
-  return self._state.matches
+---TODO: We should decide how to get the default keyword pattern here.
+---@return string
+function CompletionProvider:get_keyword_pattern()
+  return self._config.keyword_pattern
 end
 
 ---Return keyword offest position.
@@ -309,6 +259,72 @@ function CompletionProvider:get_keyword_offset()
   end
 
   return extract_keyword_range(self._state.trigger_context, self:get_keyword_pattern())[1]
+end
+
+---Return ready state.
+---@return complete.core.CompletionProvider.RequestState
+function CompletionProvider:get_request_state()
+  return self._state.request_state
+end
+
+---Return current completion context.
+---@return complete.kit.LSP.CompletionContext?
+function CompletionProvider:get_completion_context()
+  return self._state.completion_context
+end
+
+---Clear completion state.
+function CompletionProvider:clear()
+  self._state = { ready_state = RequestState.Waiting }
+end
+
+---Return completion items.
+---@param trigger_context complete.core.TriggerContext
+---@param matcher complete.core.Matcher
+---@return complete.core.Match[]
+function CompletionProvider:get_matches(trigger_context, matcher)
+  local is_acceptable = not not self._state.trigger_context
+  is_acceptable = is_acceptable and self._state.trigger_context.bufnr == trigger_context.bufnr
+  is_acceptable = is_acceptable and self._state.trigger_context.line == trigger_context.line
+  if not is_acceptable then
+    return {}
+  end
+
+  local next_before_text = trigger_context.text_before
+  local prev_before_text = self._state.matches_before_text
+  self._state.matches_before_text = next_before_text
+
+  -- completely same situation.
+  if prev_before_text and prev_before_text == next_before_text then
+    return self._state.matches
+  end
+
+  -- filter target items (all items by default).
+  local target_items = self._state.items or {}
+  if prev_before_text and prev_before_text == next_before_text:sub(1, #prev_before_text) then
+    -- re-use already filtered items for new filter text.
+    target_items = self._state.matches_items or {}
+  end
+
+  self._state.matches = {}
+  self._state.matches_items = {}
+  for i, item in ipairs(target_items) do
+    local query_text = trigger_context:get_query(item:get_offset())
+    local filter_text = item:get_filter_text()
+    local score, match_positions = matcher(query_text, filter_text)
+    if score > 0 then
+      local label_text = item:get_label_text()
+      self._state.matches_items[#self._state.matches_items + 1] = item
+      self._state.matches[#self._state.matches + 1] = {
+        provider = self,
+        item = item,
+        score = score,
+        index = i,
+        match_positions = label_text ~= filter_text and select(2, matcher(query_text, label_text)) or match_positions,
+      }
+    end
+  end
+  return self._state.matches
 end
 
 ---Create default insert range from keyword pattern.
