@@ -8,7 +8,7 @@ local CompletionProvider = require('complete.core.CompletionProvider')
 
 local default_option = {
   performance = {
-    fetching_timeout_ms = 500,
+    fetching_timeout_ms = 200,
   },
   sorter = DefaultSorter.sorter,
   matcher = DefaultMatcher.matcher,

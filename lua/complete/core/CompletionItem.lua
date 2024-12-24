@@ -69,7 +69,8 @@ function CompletionItem:get_offset()
       self._cache[cache_key] = keyword_offset
     else
       local insert_range = self:get_insert_range()
-      local trigger_context_cache_key = string.format('%s:%s:%s', 'get_offset', keyword_offset, insert_range.start.character)
+      local trigger_context_cache_key = string.format('%s:%s:%s', 'get_offset', keyword_offset,
+        insert_range.start.character)
       if not self._trigger_context.cache[trigger_context_cache_key] then
         local offset = insert_range.start.character + 1
         for i = offset, keyword_offset do
@@ -251,7 +252,8 @@ function CompletionItem:get_documentation()
     if label_details.detail then
       local has_already = documentation.value:find(label_details.detail, 1, true)
       if not has_already then
-        local value = ('```%s\n%s\n```'):format(vim.api.nvim_get_option_value('filetype', { buf = self._trigger_context.bufnr }), label_details.detail)
+        local value = ('```%s\n%s\n```'):format(
+        vim.api.nvim_get_option_value('filetype', { buf = self._trigger_context.bufnr }), label_details.detail)
         if documentation.value ~= '' then
           value = ('%s\n%s'):format(value, documentation.value)
         end
@@ -263,7 +265,8 @@ function CompletionItem:get_documentation()
     if documentation.value == '' then
       documentation = nil
     else
-      documentation.value = documentation.value:gsub('\r\n', '\n'):gsub('\r', '\n'):gsub('^[%s\n]+', ''):gsub('[%s\n]+$', '')
+      documentation.value = documentation.value:gsub('\r\n', '\n'):gsub('\r', '\n'):gsub('^[%s\n]+', ''):gsub('[%s\n]+$',
+        '')
     end
     self._cache[cache_key] = documentation
   end
@@ -333,14 +336,14 @@ function CompletionItem:commit(option)
     if self._item.additionalTextEdits then
       vim.lsp.util.apply_text_edits(
         vim
-          .iter(self._item.additionalTextEdits)
-          :map(function(text_edit)
-            return {
-              range = self:_convert_range_encoding(text_edit.range),
-              newText = text_edit.newText,
-            }
-          end)
-          :totable(),
+        .iter(self._item.additionalTextEdits)
+        :map(function(text_edit)
+          return {
+            range = self:_convert_range_encoding(text_edit.range),
+            newText = text_edit.newText,
+          }
+        end)
+        :totable(),
         bufnr,
         LSP.PositionEncodingKind.UTF8
       )
@@ -372,14 +375,14 @@ function CompletionItem:commit(option)
             if not should_skip then
               vim.lsp.util.apply_text_edits(
                 kit
-                  .iter(self._item.additionalTextEdits)
-                  :map(function(text_edit)
-                    return {
-                      range = self:_convert_range_encoding(text_edit.range),
-                      newText = text_edit.newText,
-                    }
-                  end)
-                  :totable(),
+                .iter(self._item.additionalTextEdits)
+                :map(function(text_edit)
+                  return {
+                    range = self:_convert_range_encoding(text_edit.range),
+                    newText = text_edit.newText,
+                  }
+                end)
+                :totable(),
                 bufnr,
                 LSP.PositionEncodingKind.UTF8
               )
@@ -457,15 +460,20 @@ function CompletionItem:_convert_range_encoding(range)
     return range
   end
 
-  local cache_key = string.format('%s:%s', 'CompletionItem:_convert_range_encoding', range.start.character, range['end'].character, from_encoding)
+  local cache_key = string.format('%s:%s', 'CompletionItem:_convert_range_encoding', range.start.character,
+    range['end'].character, from_encoding)
   if not self._trigger_context.cache[cache_key] then
-    local start_cache_key = string.format('%s:%s:%s', 'CompletionItem:_convert_range_encoding:start', range.start.character, from_encoding)
+    local start_cache_key = string.format('%s:%s:%s', 'CompletionItem:_convert_range_encoding:start',
+      range.start.character, from_encoding)
     if not self._trigger_context.cache[start_cache_key] then
-      self._trigger_context.cache[start_cache_key] = Position.to_utf8(self._trigger_context.text, range.start, from_encoding)
+      self._trigger_context.cache[start_cache_key] = Position.to_utf8(self._trigger_context.text, range.start,
+        from_encoding)
     end
-    local end_cache_key = string.format('%s:%s:%s', 'CompletionItem:_convert_range_encoding:end', range['end'].character, from_encoding)
+    local end_cache_key = string.format('%s:%s:%s', 'CompletionItem:_convert_range_encoding:end', range['end'].character,
+      from_encoding)
     if not self._trigger_context.cache[end_cache_key] then
-      self._trigger_context.cache[end_cache_key] = Position.to_utf8(self._trigger_context.text, range['end'], from_encoding)
+      self._trigger_context.cache[end_cache_key] = Position.to_utf8(self._trigger_context.text, range['end'],
+        from_encoding)
     end
     self._trigger_context.cache[cache_key] = {
       start = self._trigger_context.cache[start_cache_key],
