@@ -96,6 +96,12 @@ function CompletionProvider.new(source)
   return self
 end
 
+---Get provider name.
+---@return string
+function CompletionProvider:get_name()
+  return self._source.name
+end
+
 ---Completion (textDocument/completion).
 ---@param trigger_context complete.core.TriggerContext
 ---@return complete.kit.Async.AsyncTask complete.kit.LSP.CompletionContext?
@@ -103,10 +109,12 @@ function CompletionProvider:complete(trigger_context)
   return Async.run(function()
     local completion_options = self:get_completion_options()
     local trigger_characters = completion_options.triggerCharacters or {}
+    local keyword_pattern = self:get_keyword_pattern()
+    local keyword_offset = trigger_context:get_keyword_offset(keyword_pattern)
 
     ---Check should complete for new trigger context or not.
     local completion_context ---@type complete.kit.LSP.CompletionContext
-    local completion_offset = self._state.completion_offset
+    local completion_offset ---@type integer?
     if vim.tbl_contains(trigger_characters, trigger_context.before_character) then
       -- trigger character based completion.
       -- TODO: VSCode does not show completion for `const a = |` case on the @vtsls/language-server even if language-server tells `<Space>` as trigger_character.
@@ -123,46 +131,35 @@ function CompletionProvider:complete(trigger_context)
       completion_offset = trigger_context.character + 1
     else
       -- keyword based completion.
-      local keyword_pattern = self:get_keyword_pattern()
-      local next_keyword_offset = trigger_context:get_keyword_offset(keyword_pattern)
-      if next_keyword_offset and next_keyword_offset < trigger_context.character + 1 then
+      if keyword_offset and keyword_offset < trigger_context.character + 1 then
         local prev_keyword_offset = self._state.completion_offset
         local is_incomplete = self._state and self._state.is_incomplete
 
-        if is_incomplete and next_keyword_offset == prev_keyword_offset then
+        if is_incomplete and keyword_offset == prev_keyword_offset then
           -- invoke completion if previous response specifies the `isIncomplete=true` and offset is not changed.
           completion_context = {
             triggerKind = LSP.CompletionTriggerKind.TriggerForIncompleteCompletions,
           }
-          completion_offset = next_keyword_offset
-        elseif next_keyword_offset and next_keyword_offset ~= prev_keyword_offset then
+          completion_offset = keyword_offset
+        elseif keyword_offset and keyword_offset ~= prev_keyword_offset then
           -- invoke completion if keyword_offset is changed.
           completion_context = {
             triggerKind = LSP.CompletionTriggerKind.Invoked,
           }
-          completion_offset = next_keyword_offset
-        end
-      else
-        -- this branch means `keyword_completion is selected but does not match the keyword_pattern`.
-        -- drop previous completion response if previous completion is not a trigger_character completion.
-        local is_not_trigger_character_completion = not self._state.completion_context or self._state.completion_context.triggerKind ~= LSP.CompletionTriggerKind.TriggerCharacter
-        if is_not_trigger_character_completion then
-          self:clear()
+          completion_offset = keyword_offset
         end
       end
     end
 
     -- do not invoke new completion.
     if not completion_context then
+      if not keyword_offset then
+        self:clear()
+      end
       return
     end
 
-    local keep_state = true
-    keep_state = keep_state and completion_context.triggerKind == LSP.CompletionTriggerKind.TriggerForIncompleteCompletions
-    keep_state = keep_state and self._state.request_state == RequestState.Completed
-    if not keep_state then
-      self._state.request_state = RequestState.Fetching
-    end
+    self._state.request_state = RequestState.Fetching
     self._state.trigger_context = trigger_context
     self._state.completion_context = completion_context
     self._state.completion_offset = completion_offset
@@ -178,6 +175,10 @@ function CompletionProvider:complete(trigger_context)
 
     -- adopt response.
     self:_adopt_response(trigger_context, response)
+
+    if #self._state.items == 0 then
+      self:clear()
+    end
 
     return completion_context
   end)
@@ -195,10 +196,6 @@ function CompletionProvider:_adopt_response(trigger_context, list)
   self._state.matches = {}
   self._state.matches_items = {}
   self._state.matches_before_text = nil
-
-  if #self._state.items == 0 then
-    self._state.request_state = RequestState.Waiting
-  end
 end
 
 ---Resolve completion item (completionItem/resolve).
@@ -226,7 +223,8 @@ end
 ---@return boolean
 function CompletionProvider:capable(trigger_context)
   local completion_options = self:get_completion_options()
-  return not completion_options.documentSelector or DocumentSelector.score(trigger_context.bufnr, completion_options.documentSelector) ~= 0
+  return not completion_options.documentSelector or
+      DocumentSelector.score(trigger_context.bufnr, completion_options.documentSelector) ~= 0
 end
 
 ---Return LSP.PositionEncodingKind.
@@ -275,7 +273,13 @@ function CompletionProvider:clear()
   self._state = { ready_state = RequestState.Waiting }
 end
 
----Return completion items.
+---Return items.
+---@return complete.core.CompletionItem[]
+function CompletionProvider:get_items()
+  return self._state.items or {}
+end
+
+---Return matches.
 ---@param trigger_context complete.core.TriggerContext
 ---@param matcher complete.core.Matcher
 ---@return complete.core.Match[]

@@ -1,6 +1,7 @@
 local kit = require('complete.kit')
 local LSP = require('complete.kit.LSP')
 local Async = require('complete.kit.Async')
+local Character = require('complete.core.Character')
 local DefaultMatcher = require('complete.core.DefaultMatcher')
 local DefaultSorter = require('complete.core.DefaultSorter')
 local TriggerContext = require('complete.core.TriggerContext')
@@ -8,7 +9,7 @@ local CompletionProvider = require('complete.core.CompletionProvider')
 
 local default_option = {
   performance = {
-    fetching_timeout_ms = 200,
+    fetching_timeout_ms = 500,
   },
   sorter = DefaultSorter.sorter,
   matcher = DefaultMatcher.matcher,
@@ -166,9 +167,11 @@ function CompletionService:clear()
       provider_configuration.provider:clear()
     end
   end
+
+  -- reset current TriggerContext for preventing new completion in same context.
   self._state = {
-    complete_trigger_context = TriggerContext.create_empty_context(),
-    update_trigger_context = TriggerContext.create_empty_context(),
+    complete_trigger_context = TriggerContext.create(),
+    update_trigger_context = TriggerContext.create(),
     selection = {
       index = 0,
       preselect = false,
@@ -176,8 +179,10 @@ function CompletionService:clear()
     },
     matches = {},
   }
+
+  -- reset menu.
   emit(self._events.on_update or {}, {
-    trigger_context = TriggerContext.create_empty_context(),
+    trigger_context = self._state.complete_trigger_context,
     matches = {},
   })
 end
@@ -195,6 +200,7 @@ function CompletionService:select(index, preselect)
     return
   end
 
+  -- store current leading text for de-selecting.
   local text_before = self._state.selection.text_before
   if not preselect and self._state.selection.index == 0 then
     text_before = TriggerContext.create().text_before
@@ -239,7 +245,7 @@ function CompletionService:complete(trigger_context)
   self:select(0, true)
 
   -- trigger.
-  local completing_providers = {}
+  local new_completing_providers = {}
   local tasks = {} --[=[@type complete.kit.Async.AsyncTask[]]=]
   for _, provider_group in ipairs(self:_get_provider_groups()) do
     for _, provider_configuration in ipairs(provider_group) do
@@ -248,22 +254,28 @@ function CompletionService:complete(trigger_context)
         table.insert(
           tasks,
           provider_configuration.provider:complete(trigger_context):next(function(completion_context)
-            if completion_context then
+            -- update menu window if some of the conditions.
+            -- 1. new completion was invoked.
+            -- 2. change provider's `Completed` state. (true -> false or false -> true)
+            local next_request_state = provider_configuration.provider:get_request_state()
+            if completion_context or (prev_request_state == CompletionProvider.RequestState.Completed) ~= (next_request_state == CompletionProvider.RequestState.Completed) then
               self._state.update_trigger_context = TriggerContext.create_empty_context()
               self:update()
             end
           end)
         )
+
+        -- gather new completion request was invoked providers.
         local next_request_state = provider_configuration.provider:get_request_state()
         if prev_request_state ~= CompletionProvider.RequestState.Fetching and next_request_state == CompletionProvider.RequestState.Fetching then
-          table.insert(completing_providers, provider_configuration.provider)
+          table.insert(new_completing_providers, provider_configuration.provider)
         end
       end
     end
   end
 
   -- filter (if does not invoked new completion).
-  if #completing_providers == 0 then
+  if #new_completing_providers == 0 then
     self:update()
   else
     self._request_time = vim.uv.hrtime() / 1000000
@@ -273,12 +285,16 @@ function CompletionService:complete(trigger_context)
 end
 
 ---Update completion.
-function CompletionService:update()
+---@param option? { force?: boolean }
+function CompletionService:update(option)
+  option = option or {}
+  option.force = option.force or false
+
   local trigger_context = TriggerContext.create()
 
   -- check prev update_trigger_context.
   local changed = self._state.update_trigger_context:changed(trigger_context)
-  if not changed then
+  if not changed and not option.force then
     return Async.resolve({})
   end
   self._state.update_trigger_context = trigger_context
@@ -288,21 +304,24 @@ function CompletionService:update()
     return
   end
 
+  -- basically, 1st group's higiher priority provider is preferred (for reducing flickering).
+  -- but when it's response is too slow, we ignore it.
   local elapsed_ms = vim.uv.hrtime() / 1000000 - self._request_time
   local fetching_timeout_ms = self._option.performance.fetching_timeout_ms
   local fetching_timeout_remaining_ms = math.max(0, fetching_timeout_ms - elapsed_ms)
 
   self._state.matches = {}
-  for _, provider_group in ipairs(self:_get_provider_groups()) do
-    local has_fetching_provider = false
-    local has_provider_triggered_by_character = false
 
+  local has_fetching_provider = false
+  local has_provider_triggered_by_character = false
+  for _, provider_group in ipairs(self:_get_provider_groups()) do
     local provider_configurations = {} --[=[@type complete.core.CompletionService.ProviderConfiguration[]]=]
     for _, provider_configuration in ipairs(provider_group) do
       if provider_configuration.provider:capable(trigger_context) then
         local completion_context = provider_configuration.provider:get_completion_context()
         if completion_context and completion_context.triggerKind == LSP.CompletionTriggerKind.TriggerCharacter then
-          has_provider_triggered_by_character = true
+          has_provider_triggered_by_character = has_provider_triggered_by_character or
+              #provider_configuration.provider:get_items() > 0
         end
 
         -- the providers are ordered by priority.
@@ -318,12 +337,12 @@ function CompletionService:update()
       end
     end
 
-    -- if trigger character is found, remove non-trigger character providers.
+    -- if trigger character is found, remove non-trigger character providers (for UX).
     if has_provider_triggered_by_character then
-      for i = #provider_configurations, 1, -1 do
-        local completion_context = provider_configurations[i].provider:get_completion_context()
+      for j = #provider_configurations, 1, -1 do
+        local completion_context = provider_configurations[j].provider:get_completion_context()
         if not (completion_context and completion_context.triggerKind == LSP.CompletionTriggerKind.TriggerCharacter) then
-          table.remove(provider_configurations, i)
+          table.remove(provider_configurations, j)
         end
       end
     end
@@ -344,16 +363,16 @@ function CompletionService:update()
       end
 
       -- group matches are found.
-      if #self._state.matches ~= 0 then
+      if #self._state.matches > 0 then
         -- sort items.
         self._state.matches = self._option.sorter(self._state.matches)
 
         -- preselect index.
         local preselect = nil
         if has_preselect then
-          for i, match in ipairs(self._state.matches) do
+          for j, match in ipairs(self._state.matches) do
             if match.item:is_preselect() then
-              preselect = i
+              preselect = j
               break
             end
           end
@@ -377,19 +396,24 @@ function CompletionService:update()
     if has_fetching_provider then
       if fetching_timeout_remaining_ms > 0 then
         vim.defer_fn(function()
-          self:update()
-        end, fetching_timeout_remaining_ms)
+          -- if trigger_context is not changed, update menu forcely.
+          if self._state.update_trigger_context == trigger_context then
+            self:update({ force = true })
+          end
+        end, fetching_timeout_remaining_ms + 1)
       end
       return
     end
   end
 
   -- no completion found.
-  emit(self._events.on_update or {}, {
-    trigger_context = trigger_context,
-    preselect = nil,
-    matches = {},
-  })
+  if not has_fetching_provider then
+    emit(self._events.on_update or {}, {
+      trigger_context = trigger_context,
+      preselect = nil,
+      matches = {},
+    })
+  end
 end
 
 ---Commit completion.
@@ -398,31 +422,34 @@ end
 function CompletionService:commit(item, option)
   local resume = self:prevent()
   return item
-    :commit({
-      replace = option and option.replace,
-      expand_snippet = option and option.expand_snippet,
-    })
-    :next(resume)
-    :next(function()
-      self:clear()
+      :commit({
+        replace = option and option.replace,
+        expand_snippet = option and option.expand_snippet,
+      })
+      :next(resume)
+      :next(function()
+        self:clear()
 
-      -- re-trigger completion for trigger characters.
-      local trigger_context = TriggerContext.create()
-      for _, provider_group in ipairs(self:_get_provider_groups()) do
-        local provider_configurations = {} --[=[@type complete.core.CompletionService.ProviderConfiguration[]]=]
-        for _, provider_configuration in ipairs(provider_group) do
-          if provider_configuration.provider:capable(trigger_context) then
-            table.insert(provider_configurations, provider_configuration)
+        -- re-trigger completion for trigger characters.
+        --For this to run, we need to ignore contexts marked by `self:clear()`, so `force=true` is required.
+        local trigger_context = TriggerContext.create({ force = true })
+        if trigger_context.before_character and Character.is_symbol(trigger_context.before_character:byte(1)) then
+          for _, provider_group in ipairs(self:_get_provider_groups()) do
+            local provider_configurations = {} --[=[@type complete.core.CompletionService.ProviderConfiguration[]]=]
+            for _, provider_configuration in ipairs(provider_group) do
+              if provider_configuration.provider:capable(trigger_context) then
+                table.insert(provider_configurations, provider_configuration)
+              end
+            end
+            for _, provider_configuration in ipairs(provider_configurations) do
+              local completion_options = provider_configuration.provider:get_completion_options()
+              if vim.tbl_contains(completion_options.triggerCharacters or {}, trigger_context.before_character) then
+                return self:complete(trigger_context)
+              end
+            end
           end
         end
-        for _, provider_configuration in ipairs(provider_configurations) do
-          local completion_options = provider_configuration.provider:get_completion_options()
-          if vim.tbl_contains(completion_options.triggerCharacters or {}, trigger_context.before_character) then
-            return self:complete(trigger_context)
-          end
-        end
-      end
-    end)
+      end)
 end
 
 ---Prevent completion.

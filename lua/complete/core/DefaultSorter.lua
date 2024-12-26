@@ -3,6 +3,12 @@
 ---@param b complete.core.Match
 ---@return boolean|nil
 local function compare(a, b)
+  local offset_a = a.item:get_offset()
+  local offset_b = b.item:get_offset()
+  if offset_a ~= offset_b then
+    return offset_a < offset_b
+  end
+
   if a.score ~= b.score then
     return a.score > b.score
   end

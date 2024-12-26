@@ -33,7 +33,9 @@ local function create_provider_by_cmp(cmp_source)
     end,
     resolve = function(_, item)
       return Async.new(function(resolve)
-        cmp_source:resolve(item --[[@as any]], resolve)
+        cmp_source:resolve(item --[[@as any]], function(item)
+          resolve(item)
+        end)
       end)
     end,
     execute = function(_, command)

@@ -8,6 +8,23 @@ local Character = require('complete.core.Character')
 local SelectText = require('complete.core.SelectText')
 local SnippetText = require('complete.core.SnippetText')
 
+---@type fun(s: string): string
+local oneline
+do
+  local stop = {
+    [('\n'):byte(1)] = true,
+    [('\r'):byte(1)] = true,
+  }
+  oneline = function(s)
+    for i = 1, #s do
+      if stop[s:byte(i)] then
+        return s:sub(1, i)
+      end
+    end
+    return s
+  end
+end
+
 ---Get expanded range.
 ---@param ranges { [1]: complete.kit.LSP.Range } | complete.kit.LSP.Range[]
 ---@return complete.kit.LSP.Range
@@ -67,26 +84,26 @@ function CompletionItem:get_offset()
     local keyword_offset = self._provider:get_keyword_offset()
     if not self:has_text_edit() then
       self._cache[cache_key] = keyword_offset
-      -- TODO: is this unneeded?
-      -- local text = self:get_select_text()
-      -- local min_offset = math.max(1, keyword_offset - #text)
-      -- for i = keyword_offset - 1, min_offset, -1 do
-      --   if Character.is_semantic_index(self._trigger_context.text_before, i) then
-      --     local m = false
-      --     local k = 1
-      --     for j = i, #self._trigger_context.text_before - 1 do
-      --       if self._trigger_context.text_before:byte(j) == text:byte(k) then
-      --         k = k + 1
-      --       else
-      --         m = false
-      --         break
-      --       end
-      --     end
-      --     if m then
-      --       self._cache[cache_key] = i
-      --     end
-      --   end
-      -- end
+      local filter_text = self:get_filter_text()
+      if filter_text ~= '' and not Character.is_alpha(filter_text:byte(1)) then
+        local min_i = math.max(1, keyword_offset - #filter_text)
+        for i = math.min(#self._trigger_context.text_before, keyword_offset), min_i, -1 do
+          if Character.is_semantic_index(self._trigger_context.text, i) then
+            local m = true
+            local max_j = math.min(i + #filter_text - 1, #self._trigger_context.text_before)
+            for j = i, max_j do
+              if self._trigger_context.text_before:byte(j) ~= filter_text:byte(1 + j - i) then
+                m = false
+                break
+              end
+            end
+            if m then
+              self._cache[cache_key] = i
+              break
+            end
+          end
+        end
+      end
     else
       local insert_range = self:get_insert_range()
       local trigger_context_cache_key = string.format('%s:%s:%s', 'get_offset', keyword_offset,
@@ -149,18 +166,20 @@ function CompletionItem:get_select_text()
         text = tostring(SnippetText.parse(text)) --[[@as string]]
       end
     end
-    local completion_options = self._provider:get_completion_options()
+
     local chars = {}
-    chars = kit.concat(chars, self._item.commitCharacters or {})
-    chars = kit.concat(chars, completion_options.triggerCharacters or {})
-    local select_text = SelectText.create(text)
-    for _, char in ipairs(chars) do
-      if select_text:sub(-1, -1) == char then
-        select_text = select_text:sub(1, -2)
-        break
-      end
+    for _, c in ipairs(self._item.commitCharacters or {}) do
+      chars[c] = true
     end
-    self._cache[cache_key] = select_text
+    for _, c in ipairs(self._provider:get_completion_options().triggerCharacters or {}) do
+      chars[c] = true
+    end
+
+    local select_text = SelectText.create(text)
+    if chars[select_text:sub(-1, -1)] then
+      select_text = select_text:sub(1, -2)
+    end
+    self._cache[cache_key] = oneline(select_text)
   end
   return self._cache[cache_key]
 end
@@ -177,7 +196,7 @@ function CompletionItem:get_filter_text()
     local delta = self._provider:get_keyword_offset() - self:get_offset()
     if delta > 0 then
       local prefix = self._trigger_context.text:sub(self:get_offset(), self._provider:get_keyword_offset() - 1)
-      if not prefix:match('^%a') and text:sub(1, #prefix) ~= prefix then
+      if Character.is_symbol(prefix:byte(1)) and text:sub(1, #prefix) ~= prefix then
         text = prefix .. text
       end
     end
@@ -274,7 +293,7 @@ function CompletionItem:get_documentation()
       local has_already = documentation.value:find(label_details.detail, 1, true)
       if not has_already then
         local value = ('```%s\n%s\n```'):format(
-        vim.api.nvim_get_option_value('filetype', { buf = self._trigger_context.bufnr }), label_details.detail)
+          vim.api.nvim_get_option_value('filetype', { buf = self._trigger_context.bufnr }), label_details.detail)
         if documentation.value ~= '' then
           value = ('%s\n%s'):format(value, documentation.value)
         end
@@ -447,7 +466,9 @@ function CompletionItem:get_insert_range()
   if range then
     return self:_convert_range_encoding(range)
   else
-    return self._provider:get_default_insert_range()
+    local default_range = self._provider:get_default_insert_range()
+    default_range.start.character = self:get_offset() - 1
+    return default_range
   end
 end
 

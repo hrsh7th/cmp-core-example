@@ -101,6 +101,7 @@ function DefaultView.new(service, option)
     self:_on_select(payload)
   end)
 
+  -- common window config.
   for _, win in ipairs({ self._menu_window, self._docs_window }) do
     win:set_buf_option('buftype', 'nofile')
     win:set_buf_option('tabstop', 1)
@@ -112,13 +113,22 @@ function DefaultView.new(service, option)
     win:set_win_option('foldenable', false)
     win:set_win_option('wrap', false)
     if self._option.border then
-      win:set_win_option('winhighlight', 'NormalFloat:Normal,Normal:Normal,FloatBorder:FloatBorder,CursorLine:Visual,Search:None')
+      win:set_win_option('winhighlight',
+        'NormalFloat:Normal,Normal:Normal,FloatBorder:Normal,CursorLine:Visual,Search:None')
     else
-      win:set_win_option('winhighlight', 'NormalFloat:Pmenu,Normal:Pmenu,FloatBorder:Pmenu,CursorLine:PmenuSel,Search:None')
+      win:set_win_option('winhighlight',
+        'NormalFloat:Pmenu,Normal:Pmenu,FloatBorder:Pmenu,CursorLine:PmenuSel,Search:None')
     end
-    win:set_win_option('winhighlight', 'NormalFloat:PmenuSbar,Normal:PmenuSbar,EndOfBuffer:PmenuSbar,Search:None', 'scrollbar_track')
-    win:set_win_option('winhighlight', 'NormalFloat:PmenuThumb,Normal:PmenuThumb,EndOfBuffer:PmenuThumb,Search:None', 'scrollbar_thumb')
+    win:set_win_option('winhighlight', 'NormalFloat:PmenuSbar,Normal:PmenuSbar,EndOfBuffer:PmenuSbar,Search:None',
+      'scrollbar_track')
+    win:set_win_option('winhighlight', 'NormalFloat:PmenuThumb,Normal:PmenuThumb,EndOfBuffer:PmenuThumb,Search:None',
+      'scrollbar_thumb')
   end
+
+  -- docs window config.
+  self._docs_window:set_config({ markdown = true })
+  self._docs_window:set_win_option('wrap', true)
+
   return self
 end
 
@@ -139,7 +149,9 @@ function DefaultView:attach(bufnr)
     group = self._augroup,
     pattern = ('<buffer=%s>'):format(bufnr),
     callback = function()
-      self._service:update()
+      vim.schedule(function()
+        self._service:update()
+      end)
     end,
   })
 
@@ -148,10 +160,16 @@ function DefaultView:attach(bufnr)
     group = self._augroup,
     pattern = ('<buffer=%s>'):format(bufnr),
     callback = function(e)
-      if e.match:sub(1, 2) == 'i:' then
-        self:close()
-        self._service:clear()
-      end
+      local prev = e.match:sub(1, 1)
+      vim.schedule(function()
+        local next = vim.api.nvim_get_mode().mode
+        if prev == 's' and next == 'i' then
+          self._service:complete(TriggerContext.create())
+        elseif next ~= 'i' then
+          self:close()
+          self._service:clear()
+        end
+      end)
     end,
   })
 end
@@ -179,12 +197,12 @@ function DefaultView:_on_update(payload)
   end
 
   ---@type fun(text: string): integer
-  local get_displaywidth
+  local get_strwidth
   do
     local cache = {}
-    get_displaywidth = function(text)
+    get_strwidth = function(text)
       if not cache[text] then
-        cache[text] = vim.fn.strdisplaywidth(text)
+        cache[text] = vim.api.nvim_strwidth(text)
       end
       return cache[text]
     end
@@ -289,7 +307,7 @@ function DefaultView:_on_update(payload)
     end
     local line = formatting:format(unpack(args))
     table.insert(lines, line)
-    display_width = math.max(display_width, get_displaywidth(line))
+    display_width = math.max(display_width, get_strwidth(line))
   end
   vim.api.nvim_buf_set_lines(self._menu_window:get_buf(), 0, -1, false, lines)
 
@@ -297,9 +315,9 @@ function DefaultView:_on_update(payload)
   local leading_text = vim.api.nvim_get_current_line():sub(min_offset, vim.fn.col('.') - 1)
   local pos = vim.fn.screenpos(0, vim.fn.line('.'), vim.fn.col('.'))
   local row = pos.row - 1 -- default row should be below the cursor. so we use 1-origin as-is.
-  local col = pos.col - vim.fn.strdisplaywidth(leading_text)
+  local col = pos.col - vim.api.nvim_strwidth(leading_text)
 
-  local border_size = self._menu_window:compute_border_size(self._option.border)
+  local border_size = FloatingWindow.get_border_size(self._option.border)
   local row_off = 1
   local col_off = -(border_size.left + config.padding_left) - 1 -- `-1` is first char align.
   local anchor = 'NW'
@@ -340,12 +358,13 @@ function DefaultView:_on_select(payload)
     end
 
     -- set selected_item.
+    local prev_item = self._selected_item
     local match = payload.matches[payload.selection.index]
     self._selected_item = match and match.item
 
     -- insert text.
     if not payload.selection.preselect then
-      self._insert_selection(payload.selection.text_before, match and match.item):await()
+      self._insert_selection(payload.selection.text_before, self._selected_item, prev_item):await()
     end
 
     -- show documentation.
@@ -357,29 +376,35 @@ end
 
 ---Insert selection.
 ---@param text_before string
----@param item? complete.core.CompletionItem
+---@param item_next? complete.core.CompletionItem
+---@param item_prev? complete.core.CompletionItem
 ---@return complete.kit.Async.AsyncTask
-function DefaultView._insert_selection(text_before, item)
+function DefaultView._insert_selection(text_before, item_next, item_prev)
   local text = vim.api.nvim_get_current_line()
   local cursor = vim.api.nvim_win_get_cursor(0)[2]
-  local offset = item and item:get_offset() - 1 or #text_before
 
   local keys = {}
 
-  if #text_before < cursor then
-    -- del overtyping chars.
-    table.insert(keys, Keymap.termcodes('<C-g>U<Left><Del>'):rep(vim.fn.strchars(text:sub(#text_before + 1, cursor), true)))
-  elseif #text_before > cursor then
-    -- add removed chars.
-    table.insert(keys, text_before:sub(cursor + 1))
+  -- remove inserted text to previous item.
+  local to_remove_offset = item_prev and item_prev:get_offset() - 1 or #text_before
+  if to_remove_offset < cursor then
+    table.insert(keys,
+      Keymap.termcodes('<C-g>U<Left><Del>'):rep(vim.fn.strchars(text:sub(to_remove_offset + 1, cursor), true)))
+  end
+
+  -- restore missing characters.
+  if to_remove_offset < #text_before then
+    table.insert(keys, text_before:sub(to_remove_offset + 1))
   end
 
   -- apply `select_text`.
-  if item then
-    if offset < #text_before then
-      table.insert(keys, Keymap.termcodes('<C-g>U<Left><Del>'):rep(vim.fn.strchars(text_before:sub(offset + 1), true)))
+  if item_next then
+    local next_offset = item_next:get_offset() - 1
+    if next_offset < #text_before then
+      table.insert(keys,
+        Keymap.termcodes('<C-g>U<Left><Del>'):rep(vim.fn.strchars(text_before:sub(next_offset + 1), true)))
     end
-    table.insert(keys, item:get_select_text())
+    table.insert(keys, item_next:get_select_text())
   end
   return Keymap.send(keys)
 end
@@ -408,38 +433,37 @@ function DefaultView:_update_docs(item)
       return
     end
 
-    local menu_config = vim.api.nvim_win_get_config(self._menu_window:get_win())
-    local menu_border_size = self._menu_window:compute_border_size(menu_config.border)
-    local menu_viewport = self._menu_window:compute_viewport({
-      area_width = menu_config.width + menu_border_size.left + menu_border_size.right,
-      area_height = menu_config.height,
-      border = menu_config.border,
-    })
+    local menu_viewport = self._menu_window:get_viewport()
+    local docs_border = menu_viewport.border and menu_viewport.border or padding_inline_border
 
     -- set buffer contents.
     Markdown.set(self._docs_window:get_buf(), self._ns_id, vim.split(documentation.value, '\n', { plain = true }))
 
-    local docs_viewport = self._docs_window:compute_viewport({
-      area_width = math.floor(vim.o.columns * 0.5),
-      area_height = math.floor(vim.o.lines * 0.35),
-      border = menu_config.border and menu_config.border or padding_inline_border,
+    local max_width = math.floor(vim.o.columns * 0.5)
+    local max_height = math.floor(vim.o.lines * 0.7)
+    local border_size = FloatingWindow.get_border_size(docs_border)
+    local content_size = FloatingWindow.get_content_size({
+      bufnr = self._docs_window:get_buf(),
+      wrap = self._docs_window:get_win_option('wrap'),
+      max_inner_width = max_width - border_size.h,
+      markdown = self._docs_window:get_config().markdown,
     })
 
-    local row = menu_config.row
-    local col = menu_config.col + menu_viewport.outer_width + 1
-    if row + docs_viewport.outer_height > vim.o.lines then
-      row = vim.o.lines - docs_viewport.outer_height
-    end
-    if col + docs_viewport.outer_width > vim.o.columns then
-      col = menu_config.col - docs_viewport.outer_width
-    end
+    local restricted_size = FloatingWindow.compute_restricted_size({
+      border_size = border_size,
+      content_size = content_size,
+      max_outer_width = max_width,
+      max_outer_height = max_height,
+    })
 
+    local row = menu_viewport.row
+    local col = menu_viewport.col + menu_viewport.outer_width
     self._docs_window:show({
-      row = row,--[[@as integer]]
+      row = row, --[[@as integer]]
       col = col,
-      width = docs_viewport.inner_width,
-      height = docs_viewport.inner_height,
-      border = menu_config.border and menu_config.border or padding_inline_border,
+      width = restricted_size.inner_width,
+      height = restricted_size.inner_height,
+      border = docs_border,
       style = 'minimal',
     })
   end)

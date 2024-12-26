@@ -199,5 +199,35 @@ describe('complete.core', function()
         end)
       end)
     end)
+
+    it('should support symbolic keyword completion (special feature)', function()
+      -- This test verifies that the filterText correction for clangd does not cause any problems with lua-language-server completion.
+      Keymap.spec(function()
+        Keymap.send('i'):await()
+        local _, provider = spec.setup({
+          input = 'd',
+          buffer_text = {
+            '\\|',
+          },
+          items = {
+            {
+              label = '\\date',
+              insertText = '2024-12-25',
+            }
+          },
+        })
+        local trigger_context = TriggerContext.create()
+        local match = provider:get_matches(trigger_context, DefaultMatcher.matcher)[1]
+        assert.equals(match.item:get_offset(), #'' + 1)
+        assert.equals(trigger_context:get_query(match.item:get_offset()), '\\d')
+        assert.equals(match.item:get_select_text(), '2024-12-25')
+        assert.equals(match.item:get_filter_text(), '\\date')
+        match.item:commit({ replace = true }):await()
+        spec.assert({
+          '2024-12-25',
+        })
+        Keymap.send(Keymap.termcodes('<Esc>')):await()
+      end)
+    end)
   end)
 end)

@@ -2,8 +2,33 @@
 
 local kit = require('complete.kit')
 
----@alias complete.core.Markdown.Range { [1]: integer, [2]: integer, [3]: integer, [4]: integer }
----@alias complete.core.Markdown.Conceal { row: integer, col: integer, end_row: integer, end_col: integer, conceal: string }
+---@class complete.core.Markdown.Range
+---@field public [1] integer
+---@field public [2] integer
+---@field public [3] integer
+---@field public [4] integer
+
+---@class complete.core.Markdown.Extmark
+---@field public row integer
+---@field public col integer
+---@field public end_row? integer
+---@field public end_col? integer
+---@field public hl_group? string
+---@field public virt_text? deck.VirtualText[]
+---@field public virt_text_pos? 'eol' | 'overlay' | 'right_align' | 'inline'
+---@field public virt_text_win_col? integer
+---@field public virt_text_hide? boolean
+---@field public virt_text_repeat_linebreak? boolean
+---@field public virt_lines? deck.VirtualText[][]
+---@field public virt_lines_above? boolean
+---@field public ephemeral? boolean
+---@field public priority? integer
+---@field public sign_text? string
+---@field public sign_hl_group? string
+---@field public number_hl_group? string
+---@field public line_hl_group? string
+---@field public conceal? string
+---@field public url? string
 
 ---@class complete.core.Markdown.CodeBlockSection
 ---@field public type 'code_block'
@@ -45,7 +70,7 @@ end
 
 ---Prepare markdown contents.
 ---@param raw_contents string[]
----@return string[], table<string, complete.core.Markdown.Range[]>, complete.core.Markdown.Conceal[]
+---@return string[], table<string, complete.core.Markdown.Range[]>, complete.core.Markdown.Extmark[]
 local function prepare_markdown_contents(raw_contents)
   ---@type complete.core.Markdown.Section[]
   local sections = {}
@@ -104,9 +129,6 @@ local function prepare_markdown_contents(raw_contents)
       end
     elseif section.type == 'markdown' then
       section.contents = trim_empty_lines(section.contents)
-      if #section.contents == 0 then
-        table.remove(sections, i)
-      end
 
       -- shrink linebreak for markdown rules.
       for j = #section.contents, 1, -1 do
@@ -114,13 +136,17 @@ local function prepare_markdown_contents(raw_contents)
           table.remove(section.contents, j)
         end
       end
+
+      if #section.contents == 0 then
+        table.remove(sections, i)
+      end
     end
   end
 
   -- parse annotations.
   local contents = {} ---@type string[]
   local languages = {} ---@type table<string, complete.core.Markdown.Range>
-  local conceals = {} ---@type complete.core.Markdown.Conceal[]
+  local extmarks = {} ---@type complete.core.Markdown.Extmark[]
   for i, section in ipairs(sections) do
     -- insert empty lines between different sections.
     if i > 1 and #sections > 1 and section.type ~= 'separator' and sections[i - 1].type ~= 'separator' then
@@ -144,10 +170,11 @@ local function prepare_markdown_contents(raw_contents)
         for j = 1, #content do
           local c = content:sub(j, j)
           if c == '\\' then
-            -- escape sequence. @see https://github.com/mattcone/markdown-guide/blob/master/_basic-syntax/escaping-characters.md
+            -- escape sequence.
+            -- @see https://github.com/mattcone/markdown-guide/blob/master/_basic-syntax/escaping-characters.md
             local n = content:sub(j + 1, j + 1)
             if vim.tbl_contains(escaped_characters, n) then
-              table.insert(conceals, {
+              table.insert(extmarks, {
                 row = #contents,
                 col = j - 1,
                 end_row = #contents,
@@ -163,7 +190,7 @@ local function prepare_markdown_contents(raw_contents)
             local n2 = content:sub(j + 2, j + 2)
             if n1 == '_' and n2 == '_' then
               content = ('%s.%s'):format(content:sub(1, j), content:sub(j + 1))
-              table.insert(conceals, {
+              table.insert(extmarks, {
                 row = #contents,
                 col = j,
                 end_row = #contents,
@@ -171,6 +198,26 @@ local function prepare_markdown_contents(raw_contents)
                 conceal = '',
               })
               j = j + 2
+            end
+          elseif c == '[' then
+            -- TODO: hack for neovim's conceal and wrap behavior.
+            -- markdown's link syntax can have long concealed text. it makes text wrap by concealed text.
+            -- so we trim markdown's link syntax here.
+            local link_s, link_e = content:find('%b[]%b()', j)
+            if link_s and link_e then
+              local url = content:match('%b[](%b())', j):sub(2, -2)
+              local name_s, name_e = content:find('%b[]')
+              local name = content:sub(name_s + 1, name_e - 1)
+              content = content:gsub('%b[]%b()', name)
+              table.insert(extmarks, {
+                row = #contents,
+                col = j - 1,
+                end_row = #contents,
+                end_col = j + #name - 1,
+                hl_group = '@markup.link.label.markdown_inline',
+                url = url,
+              })
+              j = j + #name - 1
             end
           end
         end
@@ -180,10 +227,16 @@ local function prepare_markdown_contents(raw_contents)
       languages['markdown_inline'] = languages['markdown_inline'] or {}
       table.insert(languages['markdown_inline'], { s - 1, 0, e - 1, #contents[#contents] })
     elseif section.type == 'separator' then
-      table.insert(contents, ('─'):rep(vim.o.columns))
+      table.insert(extmarks, {
+        row = #contents - 1,
+        col = 0,
+        end_row = #contents - 1,
+        end_col = 0,
+        virt_lines = { { { ('─'):rep(vim.o.columns) } } }
+      })
     end
   end
-  return contents, languages, conceals
+  return contents, languages, extmarks
 end
 
 ---Set markdown contents to the buffer.
@@ -191,10 +244,9 @@ end
 ---@param ns_id integer
 ---@param raw_contents string[]
 function Markdown.set(bufnr, ns_id, raw_contents)
-  local contents, languages, conceals = prepare_markdown_contents(raw_contents)
+  local contents, languages, extmarks = prepare_markdown_contents(raw_contents)
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, contents)
   vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
-
   for maybe_language, ranges in pairs(languages) do
     local language = vim.treesitter.language.get_lang(maybe_language) or maybe_language
     local parser = vim.treesitter.languagetree.new(bufnr, language)
@@ -206,10 +258,9 @@ function Markdown.set(bufnr, ns_id, raw_contents)
       end)
       :totable())
     for _, range in ipairs(ranges) do
-      parser:parse(range)
+      parser:parse(range --[[@as any]])
       parser:for_each_tree(function(tree, ltree)
         local highlighter = vim.treesitter.highlighter.new(ltree, {})
-        vim.treesitter.stop(bufnr)
         local highlighter_query = highlighter:get_query(language)
         for capture, node, metadata in highlighter_query:query():iter_captures(tree:root(), bufnr) do
           ---@diagnostic disable-next-line: invisible
@@ -238,12 +289,12 @@ function Markdown.set(bufnr, ns_id, raw_contents)
     end
   end
 
-  for _, conceal in ipairs(conceals) do
-    vim.api.nvim_buf_set_extmark(bufnr, ns_id, conceal.row, conceal.col, {
-      end_row = conceal.end_row,
-      end_col = conceal.end_col,
-      conceal = conceal.conceal,
-    })
+  for _, extmark in ipairs(extmarks) do
+    local row = extmark.row
+    local col = extmark.col
+    extmark.row = nil
+    extmark.col = nil
+    vim.api.nvim_buf_set_extmark(bufnr, ns_id, row, col, extmark --[[@as any]])
   end
 end
 

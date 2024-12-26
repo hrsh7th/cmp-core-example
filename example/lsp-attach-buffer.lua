@@ -28,11 +28,28 @@ return {
           for _, source in ipairs(cmp.get_registered_sources()) do
             if source.name ~= 'nvim_lsp' and source.name ~= 'cmdline' then
               service:register_provider(cmp_compat.create_provider_by_cmp(source), {
-                group = 2
+                group = 10
               })
             end
           end
         end
+
+        -- register test source.
+        service:register_provider(CompletionProvider.new({
+          name = 'test',
+          complete = function(_)
+            return Async.run(function()
+              return {
+                items = {
+                  {
+                    label = '\\date',
+                    insertText = os.date('%Y-%m-%d'),
+                  }
+                }
+              }
+            end)
+          end
+        }))
       end
       return buf_state[buf]
     end
@@ -45,7 +62,10 @@ return {
 
     vim.api.nvim_create_autocmd('LspAttach', {
       callback = function(e)
-        local c = vim.lsp.get_client_by_id(e.data.client_id)
+        local c = vim.lsp.get_clients({
+          bufnr = e.buf,
+          id = e.data.client_id
+        })[1]
         if not c or not c.server_capabilities.completionProvider then
           return
         end
@@ -102,7 +122,7 @@ return {
             end)
           end
         }), {
-          priority = 1
+          priority = 100
         })
       end
     })
