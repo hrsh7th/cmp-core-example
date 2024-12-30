@@ -166,7 +166,6 @@ function CompletionProvider:complete(trigger_context)
 
     -- invoke completion.
     local raw_response = self._source:complete(completion_context):await()
-    local response = to_completion_list(raw_response)
 
     -- ignore obsolete response.
     if self._state.trigger_context ~= trigger_context then
@@ -174,8 +173,7 @@ function CompletionProvider:complete(trigger_context)
     end
 
     -- adopt response.
-    self:_adopt_response(trigger_context, response)
-
+    self:_adopt_response(trigger_context, to_completion_list(raw_response))
     if #self._state.items == 0 then
       self:clear()
     end
@@ -222,9 +220,19 @@ end
 ---@param trigger_context complete.core.TriggerContext
 ---@return boolean
 function CompletionProvider:capable(trigger_context)
+  -- check source.capable function.
+  if self._source.capable and not self._source:capable(trigger_context) then
+    return false
+  end
+
+  -- check LSP.CompletionOptions
   local completion_options = self:get_completion_options()
-  return not completion_options.documentSelector or
-      DocumentSelector.score(trigger_context.bufnr, completion_options.documentSelector) ~= 0
+  if completion_options.documentSelector then
+    return DocumentSelector.score(trigger_context.bufnr, completion_options.documentSelector) ~= 0
+  end
+
+  -- default is true.
+  return true
 end
 
 ---Return LSP.PositionEncodingKind.
@@ -244,16 +252,6 @@ end
 ---@return string
 function CompletionProvider:get_keyword_pattern()
   return self._config.keyword_pattern
-end
-
----Return keyword offest position.
----@return integer 1-origin utf8 byte index
-function CompletionProvider:get_keyword_offset()
-  if not self._state.trigger_context then
-    error('The CompletionProvider: can only be called after completion has been called.')
-  end
-
-  return extract_keyword_range(self._state.trigger_context, self:get_keyword_pattern())[1]
 end
 
 ---Return ready state.

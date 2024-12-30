@@ -65,6 +65,14 @@ local components = {
       }
     end,
   },
+  {
+    padding_left = 0,
+    padding_right = 0,
+    align = 'right',
+    resolve = function(item)
+      return { item:get_source_name(), 'Comment' }
+    end,
+  },
 }
 
 ---@class complete.ext.DefaultView
@@ -91,7 +99,6 @@ function DefaultView.new(service, option)
     _service = service,
     _menu_window = FloatingWindow.new(),
     _docs_window = FloatingWindow.new(),
-    _queue = Async.resolve(),
     _matches = {},
   }, DefaultView)
   self._service:on_update(function(payload)
@@ -144,14 +151,12 @@ function DefaultView:attach(bufnr)
     end,
   })
 
-  -- CursorMovedI.
+  -- CursorMoved.
   vim.api.nvim_create_autocmd({ 'CursorMovedI' }, {
     group = self._augroup,
     pattern = ('<buffer=%s>'):format(bufnr),
     callback = function()
-      vim.schedule(function()
-        self._service:update()
-      end)
+      self._service:complete(TriggerContext.create())
     end,
   })
 
@@ -160,16 +165,9 @@ function DefaultView:attach(bufnr)
     group = self._augroup,
     pattern = ('<buffer=%s>'):format(bufnr),
     callback = function(e)
-      local prev = e.match:sub(1, 1)
-      vim.schedule(function()
-        local next = vim.api.nvim_get_mode().mode
-        if prev == 's' and next == 'i' then
-          self._service:complete(TriggerContext.create())
-        elseif next ~= 'i' then
-          self:close()
-          self._service:clear()
-        end
-      end)
+      if e.match == 'i:n' then
+        self._service:clear()
+      end
     end,
   })
 end
@@ -351,10 +349,10 @@ function DefaultView:_on_select(payload)
     -- apply selection.
     if payload.selection.index == 0 then
       self._menu_window:set_win_option('cursorline', false)
-      vim.api.nvim_win_set_cursor(self._menu_window:get_win(), { 1, 0 })
+      vim.api.nvim_win_set_cursor(self._menu_window:get_win() --[[@as integer]], { 1, 0 })
     else
       self._menu_window:set_win_option('cursorline', true)
-      vim.api.nvim_win_set_cursor(self._menu_window:get_win(), { payload.selection.index, 0 })
+      vim.api.nvim_win_set_cursor(self._menu_window:get_win() --[[@as integer]], { payload.selection.index, 0 })
     end
 
     -- set selected_item.
@@ -364,7 +362,7 @@ function DefaultView:_on_select(payload)
 
     -- insert text.
     if not payload.selection.preselect then
-      self._insert_selection(payload.selection.text_before, self._selected_item, prev_item):await()
+      self:_insert_selection(payload.selection.text_before, self._selected_item, prev_item):await()
     end
 
     -- show documentation.
@@ -379,7 +377,7 @@ end
 ---@param item_next? complete.core.CompletionItem
 ---@param item_prev? complete.core.CompletionItem
 ---@return complete.kit.Async.AsyncTask
-function DefaultView._insert_selection(text_before, item_next, item_prev)
+function DefaultView:_insert_selection(text_before, item_next, item_prev)
   local text = vim.api.nvim_get_current_line()
   local cursor = vim.api.nvim_win_get_cursor(0)[2]
 

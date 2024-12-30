@@ -1,6 +1,7 @@
 local kit = require('complete.kit')
 local LSP = require('complete.kit.LSP')
 local Async = require('complete.kit.Async')
+local Keymap = require('complete.kit.Vim.Keymap')
 local Character = require('complete.core.Character')
 local DefaultMatcher = require('complete.core.DefaultMatcher')
 local DefaultSorter = require('complete.core.DefaultSorter')
@@ -15,12 +16,17 @@ local default_option = {
   matcher = DefaultMatcher.matcher,
 } --[[@as complete.core.CompletionService.Option]]
 
+local stop_emitting = false
+
 ---Emit event.
 ---@generic T
 ---@param events (fun(payload: T): nil)[]
 ---@param payload T
 ---@return nil
 local function emit(events, payload)
+  if stop_emitting then
+    return
+  end
   for _, c in ipairs(events) do
     c(payload)
   end
@@ -62,10 +68,11 @@ end
 ---@class complete.core.CompletionService
 ---@field private _preventing integer
 ---@field private _request_time integer
----@field private _sync_mode boolean | fun():boolean
 ---@field private _state complete.core.CompletionService.State
 ---@field private _events table<string, (fun(): any)[]>
 ---@field private _option complete.core.CompletionService.Option
+---@field private _keys table<string, string>
+---@field private _macro_completion complete.kit.Async.AsyncTask[]
 ---@field private _provider_configurations complete.core.CompletionService.ProviderConfiguration[]
 ---@field private _debounced_update fun(): nil
 local CompletionService = {}
@@ -76,16 +83,15 @@ CompletionService.__index = CompletionService
 ---@return complete.core.CompletionService
 function CompletionService.new(option)
   local self = setmetatable({
-    _id = vim.uv.now(),
+    _id = kit.unique_id(),
     _preventing = 0,
     _request_time = 0,
     _changedtick = 0,
-    _sync_mode = function()
-      return not (vim.fn.reg_recording() == '' and vim.fn.reg_executing() == '')
-    end,
     _option = kit.merge(option or {}, default_option),
     _events = {},
     _provider_configurations = {},
+    _keys = {},
+    _macro_completion = {},
     _state = {
       complete_trigger_context = TriggerContext.create_empty_context(),
       update_trigger_context = TriggerContext.create_empty_context(),
@@ -97,6 +103,16 @@ function CompletionService.new(option)
       matches = {},
     },
   }, CompletionService)
+
+  self._keys.complete = ('<Plug>(c:%s:c)'):format(self._id)
+  vim.keymap.set('i', self._keys.complete, function()
+    if vim.fn.reg_executing() ~= '' then
+      local trigger_context = TriggerContext.create()
+      ---@diagnostic disable-next-line: invisible
+      table.insert(self._macro_completion, self:complete(trigger_context))
+    end
+  end)
+
   return self
 end
 
@@ -154,12 +170,6 @@ function CompletionService:register_provider(provider, config)
   end
 end
 
----Set sync mode.
----@param sync_mode boolean
-function CompletionService:set_sync_mode(sync_mode)
-  self._sync_mode = sync_mode
-end
-
 ---Clear completion.
 function CompletionService:clear()
   for _, provider_group in ipairs(self:_get_provider_groups()) do
@@ -191,6 +201,13 @@ end
 ---@param index integer
 ---@param preselect? boolean
 function CompletionService:select(index, preselect)
+  if vim.fn.reg_executing() ~= '' then
+    local p = self._macro_completion
+    self._macro_completion = {}
+    Async.all(p):sync(2 * 1000)
+    self:update()
+  end
+
   index = index % (#self._state.matches + 1)
 
   local changed = false
@@ -205,7 +222,6 @@ function CompletionService:select(index, preselect)
   if not preselect and self._state.selection.index == 0 then
     text_before = TriggerContext.create().text_before
   end
-
   self._state.selection = {
     index = index,
     preselect = preselect or false,
@@ -221,7 +237,13 @@ end
 ---Get selection.
 ---@return complete.core.CompletionService.Selection
 function CompletionService:get_selection()
-  return self._state.selection
+  if vim.fn.reg_executing() ~= '' then
+    local p = self._macro_completion
+    self._macro_completion = {}
+    Async.all(p):sync(2 * 1000)
+    self:update()
+  end
+  return kit.clone(self._state.selection)
 end
 
 ---Get match at index.
@@ -235,53 +257,66 @@ end
 ---@param trigger_context complete.core.TriggerContext
 ---@return complete.kit.Async.AsyncTask
 function CompletionService:complete(trigger_context)
-  local changed = self._state.complete_trigger_context:changed(trigger_context)
-  if not changed then
-    return Async.resolve({})
-  end
-  self._state.complete_trigger_context = trigger_context
+  return Async.run(function()
+    local changed = self._state.complete_trigger_context:changed(trigger_context)
+    if not changed then
+      return Async.resolve({})
+    end
+    self._state.complete_trigger_context = trigger_context
 
-  -- reset selection for new completion.
-  self:select(0, true)
+    -- reset selection for new completion.
+    self._state.selection = {
+      index = 0,
+      preselect = true,
+      text_before = trigger_context.text_before,
+    }
 
-  -- trigger.
-  local new_completing_providers = {}
-  local tasks = {} --[=[@type complete.kit.Async.AsyncTask[]]=]
-  for _, provider_group in ipairs(self:_get_provider_groups()) do
-    for _, provider_configuration in ipairs(provider_group) do
-      if provider_configuration.provider:capable(trigger_context) then
-        local prev_request_state = provider_configuration.provider:get_request_state()
-        table.insert(
-          tasks,
-          provider_configuration.provider:complete(trigger_context):next(function(completion_context)
-            -- update menu window if some of the conditions.
-            -- 1. new completion was invoked.
-            -- 2. change provider's `Completed` state. (true -> false or false -> true)
-            local next_request_state = provider_configuration.provider:get_request_state()
-            if completion_context or (prev_request_state == CompletionProvider.RequestState.Completed) ~= (next_request_state == CompletionProvider.RequestState.Completed) then
-              self._state.update_trigger_context = TriggerContext.create_empty_context()
-              self:update()
-            end
-          end)
-        )
+    -- trigger.
+    local new_completing_providers = {}
+    local tasks = {} --[=[@type complete.kit.Async.AsyncTask[]]=]
+    for _, provider_group in ipairs(self:_get_provider_groups()) do
+      for _, provider_configuration in ipairs(provider_group) do
+        if provider_configuration.provider:capable(trigger_context) then
+          local prev_request_state = provider_configuration.provider:get_request_state()
+          table.insert(
+            tasks,
+            provider_configuration.provider:complete(trigger_context):next(function(completion_context)
+              -- update menu window if some of the conditions.
+              -- 1. new completion was invoked.
+              -- 2. change provider's `Completed` state. (true -> false or false -> true)
+              local next_request_state = provider_configuration.provider:get_request_state()
+              if completion_context or (prev_request_state == CompletionProvider.RequestState.Completed) ~= (next_request_state == CompletionProvider.RequestState.Completed) then
+                self._state.update_trigger_context = TriggerContext.create_empty_context()
+                self:update()
+              end
+            end)
+          )
 
-        -- gather new completion request was invoked providers.
-        local next_request_state = provider_configuration.provider:get_request_state()
-        if prev_request_state ~= CompletionProvider.RequestState.Fetching and next_request_state == CompletionProvider.RequestState.Fetching then
-          table.insert(new_completing_providers, provider_configuration.provider)
+          -- gather new completion request was invoked providers.
+          local next_request_state = provider_configuration.provider:get_request_state()
+          if prev_request_state ~= CompletionProvider.RequestState.Fetching and next_request_state == CompletionProvider.RequestState.Fetching then
+            table.insert(new_completing_providers, provider_configuration.provider)
+          end
         end
       end
     end
-  end
 
-  -- filter (if does not invoked new completion).
-  if #new_completing_providers == 0 then
-    self:update()
-  else
-    self._request_time = vim.uv.hrtime() / 1000000
-  end
+    if #new_completing_providers == 0 then
+      -- on-demand filter (if does not invoked new completion).
+      if vim.fn.reg_executing() == '' then
+        self:update()
+      end
+    else
+      self._request_time = vim.uv.hrtime() / 1000000
 
-  return Async.all(tasks)
+      -- set new-completion position for macro.
+      if vim.fn.reg_executing() == '' then
+        vim.api.nvim_feedkeys(Keymap.termcodes(self._keys.complete), 'nit', true)
+      end
+    end
+
+    return Async.all(tasks)
+  end)
 end
 
 ---Update completion.
@@ -318,14 +353,15 @@ function CompletionService:update(option)
     local provider_configurations = {} --[=[@type complete.core.CompletionService.ProviderConfiguration[]]=]
     for _, provider_configuration in ipairs(provider_group) do
       if provider_configuration.provider:capable(trigger_context) then
+        -- check the provider was triggered by triggerCharacters.
         local completion_context = provider_configuration.provider:get_completion_context()
         if completion_context and completion_context.triggerKind == LSP.CompletionTriggerKind.TriggerCharacter then
           has_provider_triggered_by_character = has_provider_triggered_by_character or
               #provider_configuration.provider:get_items() > 0
         end
 
-        -- the providers are ordered by priority.
-        -- if higher priority provider is fetching, skip the lower priority providers (reduce flickering).
+        -- if higher priority provider is fetching, skip the lower priority providers in same group. (reduce flickering).
+        -- NOTE: the providers are ordered by priority.
         if provider_configuration.provider:get_request_state() == CompletionProvider.RequestState.Fetching then
           has_fetching_provider = true
           if fetching_timeout_remaining_ms > 0 then
@@ -407,7 +443,7 @@ function CompletionService:update(option)
   end
 
   -- no completion found.
-  if not has_fetching_provider then
+  if not has_fetching_provider or option.force then
     emit(self._events.on_update or {}, {
       trigger_context = trigger_context,
       preselect = nil,
@@ -467,7 +503,7 @@ end
 ---Is active selection.
 ---@return boolean
 function CompletionService:_is_active_selection()
-  local selection = self:get_selection()
+  local selection = self._state.selection
   return not selection.preselect and selection.index > 0
 end
 

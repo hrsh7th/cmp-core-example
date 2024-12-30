@@ -90,16 +90,17 @@ function kit.findup(path, markers)
   end
 end
 
----Create unique id.
----@return integer
-kit.unique_id = setmetatable({
-  unique_id = 0,
-}, {
-  __call = function(self)
-    self.unique_id = self.unique_id + 1
-    return self.unique_id
-  end,
-})
+do
+  _G.kit = _G.kit or {}
+  _G.kit.unique_id = 0
+
+  ---Create unique id.
+  ---@return integer
+  kit.unique_id = function()
+    _G.kit.unique_id = _G.kit.unique_id + 1
+    return _G.kit.unique_id
+  end
+end
 
 ---Map array.
 ---@deprecated

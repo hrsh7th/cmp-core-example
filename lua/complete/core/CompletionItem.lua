@@ -75,13 +75,20 @@ function CompletionItem.new(trigger_context, provider, list, item)
   }, CompletionItem)
 end
 
+---Get source name.
+---@return string
+function CompletionItem:get_source_name()
+  return self._provider:get_name()
+end
+
 ---Get suggest offset position 1-origin utf-8 byte index.
 ---NOTE: VSCode always shows the completion menu relative to the cursor position. This is vim specific implementation.
 ---@return number
 function CompletionItem:get_offset()
   local cache_key = 'get_offset'
   if not self._cache[cache_key] then
-    local keyword_offset = self._provider:get_keyword_offset()
+    local keyword_offset = self._trigger_context:get_keyword_offset(self._provider:get_keyword_pattern()) or
+        self._trigger_context.character + 1
     if not self:has_text_edit() then
       self._cache[cache_key] = keyword_offset
       local filter_text = self:get_filter_text()
@@ -193,11 +200,15 @@ function CompletionItem:get_filter_text()
 
     -- TODO: this is vim specific implementation and can have some of the pitfalls.
     -- Fix filter_text for non-VSCode compliant servers such as clangd.
-    local delta = self._provider:get_keyword_offset() - self:get_offset()
-    if delta > 0 then
-      local prefix = self._trigger_context.text:sub(self:get_offset(), self._provider:get_keyword_offset() - 1)
-      if Character.is_symbol(prefix:byte(1)) and text:sub(1, #prefix) ~= prefix then
-        text = prefix .. text
+    local keyword_offset = self._trigger_context:get_keyword_offset(self._provider:get_keyword_pattern()) or
+        self._trigger_context.character + 1
+    if self:has_text_edit() then
+      local delta = keyword_offset - self:get_offset()
+      if delta > 0 then
+        local prefix = self._trigger_context.text:sub(self:get_offset(), keyword_offset - 1)
+        if Character.is_symbol(prefix:byte(1)) and text:sub(1, #prefix) ~= prefix then
+          text = prefix .. text
+        end
       end
     end
     self._cache[cache_key] = text
@@ -350,7 +361,11 @@ function CompletionItem:commit(option)
   local bufnr = vim.api.nvim_get_current_buf()
   return Async.run(function()
     -- Try resolve item.
-    Async.race({ self:resolve(), Async.timeout(500) }):await()
+    if vim.fn.reg_executing() == '' then
+      Async.race({ self:resolve(), Async.timeout(500) }):await()
+    else
+      Async.race({ self:resolve(), Async.timeout(500) }):sync(2 * 1000)
+    end
 
     local trigger_context --[[@as complete.core.TriggerContext]]
 

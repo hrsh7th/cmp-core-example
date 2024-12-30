@@ -31,10 +31,13 @@ local function create_provider_by_cmp(cmp_source)
         end)
       end)
     end,
+    capable = function(_)
+      return cmp_source:is_available()
+    end,
     resolve = function(_, item)
       return Async.new(function(resolve)
-        cmp_source:resolve(item --[[@as any]], function(item)
-          resolve(item)
+        cmp_source:resolve(item --[[@as any]], function(resolevd_item)
+          resolve(resolevd_item)
         end)
       end)
     end,

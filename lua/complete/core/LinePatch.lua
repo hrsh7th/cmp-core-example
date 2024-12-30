@@ -49,10 +49,11 @@ function LinePatch.apply_by_func(bufnr, before, after, insert_text)
     local after_text = string.sub(cmdline, cursor_col + after + 1)
     vim.fn.setcmdline(before_text .. insert_text .. after_text, #before_text + #insert_text + 1)
   else
+    local cursor_position = Position.cursor(LSP.PositionEncodingKind.UTF8)
     local text_edit = {
       range = {
-        start = shift_position(bufnr, Position.cursor(LSP.PositionEncodingKind.UTF8), -before),
-        ['end'] = shift_position(bufnr, Position.cursor(LSP.PositionEncodingKind.UTF8), after),
+        start = shift_position(bufnr, cursor_position, -before),
+        ['end'] = shift_position(bufnr, cursor_position, after),
       },
       newText = insert_text,
     }
@@ -87,7 +88,7 @@ function LinePatch.apply_by_keys(bufnr, before, after, insert_text)
 
   local cursor = vim.api.nvim_win_get_cursor(0)
   local line = vim.api.nvim_buf_get_lines(bufnr, cursor[1] - 1, cursor[1], false)[1]
-  local character = Position.cursor(LSP.PositionEncodingKind.UTF8).character
+  local character = cursor[2]
   local before_text = line:sub(1 + character - before, character)
   local after_text = line:sub(character + 1, character + after)
 

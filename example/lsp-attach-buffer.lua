@@ -22,34 +22,40 @@ return {
         view:attach(buf)
         buf_state[buf] = { service = service, view = view }
 
-        -- register cmp sources.
-        local ok_cmp, cmp = pcall(require, 'cmp')
-        if ok_cmp then
-          for _, source in ipairs(cmp.get_registered_sources()) do
-            if source.name ~= 'nvim_lsp' and source.name ~= 'cmdline' then
-              service:register_provider(cmp_compat.create_provider_by_cmp(source), {
-                group = 10
-              })
-            end
-          end
-        end
+        -- -- register cmp sources.
+        -- local ok_cmp, cmp = pcall(require, 'cmp')
+        -- if ok_cmp then
+        --   for _, source in ipairs(cmp.get_registered_sources()) do
+        --     if source.name ~= 'nvim_lsp' and source.name ~= 'cmdline' then
+        --       if source.name == 'nvim_lsp_signature_help' then
+        --         service:register_provider(cmp_compat.create_provider_by_cmp(source), {
+        --           priority = 1000
+        --         })
+        --       else
+        --         service:register_provider(cmp_compat.create_provider_by_cmp(source), {
+        --           group = 10
+        --         })
+        --       end
+        --     end
+        --   end
+        -- end
 
-        -- register test source.
-        service:register_provider(CompletionProvider.new({
-          name = 'test',
-          complete = function(_)
-            return Async.run(function()
-              return {
-                items = {
-                  {
-                    label = '\\date',
-                    insertText = os.date('%Y-%m-%d'),
-                  }
-                }
-              }
-            end)
-          end
-        }))
+        -- -- register test source.
+        -- service:register_provider(CompletionProvider.new({
+        --   name = 'test',
+        --   complete = function(_)
+        --     return Async.run(function()
+        --       return {
+        --         items = {
+        --           {
+        --             label = '\\date',
+        --             insertText = os.date('%Y-%m-%d'),
+        --           }
+        --         }
+        --       }
+        --     end)
+        --   end
+        -- }))
       end
       return buf_state[buf]
     end
@@ -133,12 +139,9 @@ return {
         option.delta = option.delta or 1
         option.preselect = option.preselect or false
         return {
-          enabled = function()
-            return get().service:get_match_at(1)
-          end,
           action = function()
             local selection = get().service:get_selection()
-            get().service:select(selection and selection.index + option.delta, option.preselect)
+            get().service:select(selection.index + option.delta, option.preselect)
           end
         }
       end
@@ -163,7 +166,7 @@ return {
                   expand_snippet = function(snippet)
                     vim.fn['vsnip#anonymous'](snippet)
                   end
-                })
+                }):await()
                 return
               end
             end
